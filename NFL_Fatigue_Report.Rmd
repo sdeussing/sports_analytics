@@ -17,7 +17,15 @@ What is the proposed solution to the problem?
 What is the dataset you are going to use to solve this problem? Describe the dataset and its characteristics.
 
 The dataset is a part of the NFL Big Data Bowl 2025, and it is taken from:
-https://www.kaggle.com/competitions/nfl-big-data-bowl-2025/data?select=player_play.csv 
+https://www.kaggle.com/competitions/nfl-big-data-bowl-2025/data 
+
+We are going to use three main parts of the dataset: player_play, players, and the tracking data for each week.
+
+The player_play data contains information about the action of the play, including its outcome or any penalties. Each row corresponds to one player's individual actions for each play within a game.
+
+The plays data contains information about each player, including position, height, weight, and college. We will use this data to filter to only defensive linemen within all datasets.
+
+The tracking data has the x-coordinate, y-coordinate, direction, orientation, speed, and acceleration for each player involved in each play in a game. We will use this movement data to calculate player fatigue. This tracking data is available for all 9 weeks of the season.
 
 ## Contribution
 Imogen Meers & Sarah Deussing
