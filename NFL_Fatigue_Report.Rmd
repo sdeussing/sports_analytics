@@ -1,0 +1,38 @@
+---
+title: "NFL_Fatigue_Analysis"
+author: "Sarah Deussing"
+date: "2024-11-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data
+Tackles
+```{r}
+tackles <- read.csv('tackles.csv')
+head(tackles)
+summary(tackles)
+```
+
+Binary variables:
+ - pff_missedTackle
+ - forcedFumble
+ 
+Tracking
+```{r}
+tracking <- do.call("rbind", list(read.csv('tracking_week_1.csv'), read.csv('tracking_week_2.csv'),
+                                  read.csv('tracking_week_3.csv'), read.csv('tracking_week_4.csv'),
+                                  read.csv('tracking_week_5.csv'), read.csv('tracking_week_6.csv'),
+                                  read.csv('tracking_week_7.csv'), read.csv('tracking_week_8.csv'),
+                                  read.csv('tracking_week_9.csv')))
+head(tracking)
+summary(tracking)
+
+save(tracking, file = "tracking.RData")
+load("tracking.RData")
+```
+ 
+
