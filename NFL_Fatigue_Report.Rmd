@@ -5,39 +5,91 @@ date: "2024-11-11"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+## Motivation
+What is the problem you are considering and why is this an interesting problem? Has this problem been attempted before?
 
-## Data
-Tackles
+Our analysis will study fatigue in defensive linemen using their speed, acceleration, distance traveled, and orientation. We will be calculating a player load and analyze the defensive player's effectiveness. To do so, we will combine this movement data with play outcome data - if the player sacked the quarterback, had a solo tackle, etc.
+
+## Problem framing
+What is the proposed solution to the problem?
+
+## Data overview
+What is the dataset you are going to use to solve this problem? Describe the dataset and its characteristics.
+
+The dataset is a part of the NFL Big Data Bowl 2025, and it is taken from:
+https://www.kaggle.com/competitions/nfl-big-data-bowl-2025/data?select=player_play.csv 
+
+## Contribution
+Imogen Meers & Sarah Deussing
+
+## R-code
 ```{r}
-tackles <- read.csv('tackles.csv')
-head(tackles)
-summary(tackles)
+library(dplyr)
 ```
 
-Binary variables:
- - pff_missedTackle
- - forcedFumble
+
+#### Data
+Play Data for Each Player
+```{r}
+play <- read.csv('player_play.csv')
+player_data <- read.csv('players.csv')
+```
+
+
+Filter to only defensive linemen.
+- DE (Defensive End)
+- DT (Defensive Tackle)
+- NT (Nose Tackle)
+```{r}
+def_line <- player_data[player_data$position == 'DE' | player_data$position == 'DT' |
+                          player_data$position == 'NT',]
+
+def_line <- play %>%
+  left_join(def_line[, c("nflId", "position")], by = "nflId")
+
+def_line <- def_line %>%
+  select(-c('hadRushAttempt', 'rushingYards', 'hadDropback', 'passingYards', 'sackYardsAsOffense',
+            'hadPassReception', 'receivingYards', 'wasTargettedReceiver', 'yardageGainedAfterTheCatch',
+            'fumbles', 'fumbleLost', 'fumbleOutOfBounds', 'wasInitialPassRusher', 'wasRunningRoute',
+            'routeRan', 'blockedPlayerNFLId1', 'blockedPlayerNFLId2', 'blockedPlayerNFLId3'))
+```
+
+Variables for defensive linemen: 
+ - assistedTackle: required an assist to make a tackle
+ - forcedFumbleAsDefense: forced a fumble by the opposing team
+ - halfSackYardsAsDefense: yards conceded by the offense because of a half-sack
+ - passDefensed: a passing play was stopped by the player
+ - quarterbackHit: player recorded a QB hit
+ - sackYardsAsDefense: yards conceded by the offense because of a sack by the player
+ - safetyAsDefense: player forced a safety on this play
+ - soloTackle: player recorded a solo tackle on this play
+ - tackleAssist: player was awarded an assisted tackle
+ - tackleForALoss: player recorded a tackle behind the line of scrimmage
+ - tackleForALossYardage: yards conceded by the offense because of a tackle
+ - hadInterception: player intercepted a pass
+ - interceptionYards: yards returned by the player on an intercepted pass
+ - fumbleRecoveries: number of fumbles recovered by the player
+ - fumbleRecoveryYards: yards returned by the player on a fumble recovery
+ - penaltyNames
+ - causedPressure: player pressured the QB
+ - timeToPressureAsPassRusher: time elapsed from snap to player reaching a pressure pro. >= to 0.75
+ - inMotionAtBallSnap: player was in motion at snap
+ - shiftSinceLineset: player shifted since the lineset
+ - pressureAllowedAsBlocker: any pass rushers that the blocker had a true matchup against recorded a pressure
+ - timeToPressureAllowedAsBlocker: time from snap to pass rusher who blocker had true matchup against achieving a pressure prob. > 0.75
+ - pff_defensiveCoverageAssignment: defensive coverage assignment given to the player
  
+```{r}
+summary(def_line)
+```
+
+
 Tracking
 ```{r, eval = FALSE}
-tracking <- do.call("rbind", list(read.csv('tracking_week_1.csv'), read.csv('tracking_week_2.csv'),
-                                  read.csv('tracking_week_3.csv'), read.csv('tracking_week_4.csv'),
-                                  read.csv('tracking_week_5.csv'), read.csv('tracking_week_6.csv'),
-                                  read.csv('tracking_week_7.csv'), read.csv('tracking_week_8.csv'),
-                                  read.csv('tracking_week_9.csv')))
-
-save(tracking, file = "tracking.RData")
+week1 <- read.csv('tracking_week_1.csv')
 ```
  
-```{r}
-load("tracking.RData")
-head(tracking)
-summary(tracking)
-```
- 
-
 Fatigue variables:
- - s (speed), a (acceleration), dis (distance traveled), dir (direction), o (orientation)
+ - s (speed), a (acceleration), dis (distance traveled), dir (direction), o (orientation) 
+ 
+
