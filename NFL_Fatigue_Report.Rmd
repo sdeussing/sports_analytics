@@ -22,17 +22,22 @@ Binary variables:
  - forcedFumble
  
 Tracking
-```{r}
+```{r, eval = FALSE}
 tracking <- do.call("rbind", list(read.csv('tracking_week_1.csv'), read.csv('tracking_week_2.csv'),
                                   read.csv('tracking_week_3.csv'), read.csv('tracking_week_4.csv'),
                                   read.csv('tracking_week_5.csv'), read.csv('tracking_week_6.csv'),
                                   read.csv('tracking_week_7.csv'), read.csv('tracking_week_8.csv'),
                                   read.csv('tracking_week_9.csv')))
-head(tracking)
-summary(tracking)
 
 save(tracking, file = "tracking.RData")
+```
+ 
+```{r}
 load("tracking.RData")
+head(tracking)
+summary(tracking)
 ```
  
 
+Fatigue variables:
+ - s (speed), a (acceleration), dis (distance traveled), dir (direction), o (orientation)
