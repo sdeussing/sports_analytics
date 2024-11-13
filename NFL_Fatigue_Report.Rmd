@@ -6,8 +6,6 @@ output: html_document
 ---
 
 ## Motivation
-What is the problem you are considering and why is this an interesting problem? Has this problem been attempted before?
-
 Our analysis will study fatigue in defensive linemen using their speed, acceleration, distance traveled, and orientation. We will be calculating a player load and analyze the defensive player's effectiveness. To do so, we will combine this movement data with play outcome data - if the player sacked the quarterback, had a solo tackle, etc.
 
 The outcome of our analysis will be to predict likelihood of "mistakes" and positive plays, based on player fatigue and other game-time variables and to identify if specific players are more fatigue-resistant.
@@ -16,16 +14,13 @@ There has been published research on long-term fatigue and "burnout" in NFL play
 
 
 ## Research
-
 We wanted to find a measure of fatigue that was derived from tracking data. From an study on _Monitoring Fatigue During Intermittent Exercise With Accelerometer-Derived Metrics_ and Catapult's own description of Player Load, we found this idea of "Dynamic Load", that is a sum of triaxial acceleration across a set time period. We do not have acceleration in three plains but we do have an acceleration in the direction of play so we decided to derive a "Load per Play" value that will be acceleration summed per player per play.
 
 As an extension to this, we will also derive a "Fatigue Index" based on the research by Beato et al., that will be a value of acceleration/speed for each value in time, i.
 
 
 ## Problem framing
-What is the proposed solution to the problem?
-
-Derive variables:
+We will be creating two derived variables:
 
 - Load by player by play
 - Fatigue index by player by play
@@ -46,24 +41,25 @@ Use player demographic data, time, tracking and load data to predict positive de
 Identify fatigue-resistant players and cluster to see if they have similar demographic characteristics.
 
 ## Data overview
-What is the dataset you are going to use to solve this problem? Describe the dataset and its characteristics.
-
 The dataset is a part of the NFL Big Data Bowl 2025, and it is taken from:
 https://www.kaggle.com/competitions/nfl-big-data-bowl-2025/data 
 
-We are going to use three main parts of the dataset: player_play, players, and the tracking data for each week.
+We are going to use four main parts of the dataset: player_play, players, plays, and the tracking data for each week.
 
 The player_play data contains information about the action of the play, including its outcome or any penalties. Each row corresponds to one player's individual actions for each play within a game.
 
-The plays data contains information about each player, including position, height, weight, and college. We will use this data to filter to only defensive linemen within all data sets.
+The players data contains information about each player, including position, height, weight, and college. We will use this data to filter to only defensive linemen within all data sets.
+
+The plays data contains information about the quarter, time, and contents of each play.
 
 The tracking data has the x-coordinate, y-coordinate, direction, orientation, speed, and acceleration for each player involved in each play in a game. We will use this movement data to calculate player fatigue. This tracking data is available for all 9 weeks of the season.
+
+The datasets can be joined on: gameId, playId, and nflId.
 
 ## Contribution
 Imogen Meers & Sarah Deussing
 
 ## Bibliography
-
 Alghannam, Abdullah F. “Metabolic limitations of performance and fatigue in football.” Asian journal of sports medicine vol. 3,2 (2012): 65-73. doi:10.5812/asjsm.34699
 
 Beato, Marco et al. “Monitoring Fatigue During Intermittent Exercise With Accelerometer-Derived Metrics.” Frontiers in physiology vol. 10 780. 26 Jun. 2019, doi:10.3389/fphys.2019.00780
@@ -76,20 +72,19 @@ Finster-Rowen, Alex. "What is Player Load?" Catapult Sports. Catapult Sports, n.
 library(dplyr)
 ```
 
-
 #### Data
 Play Data for Each Player
-```{r}
+```{r read data}
 play <- read.csv('player_play.csv')
 player_data <- read.csv('players.csv')
 ```
-
 
 Filter to only defensive linemen.
 - DE (Defensive End)
 - DT (Defensive Tackle)
 - NT (Nose Tackle)
-```{r}
+
+```{r make def line}
 def_line <- player_data[player_data$position == 'DE' | player_data$position == 'DT' |
                           player_data$position == 'NT',]
 
@@ -133,9 +128,13 @@ summary(def_line)
 ```
 
 
-Tracking
+Tracking Data
 ```{r, eval = FALSE}
 week1 <- read.csv('tracking_week_1.csv')
+week2 <- read.csv('tracking_week_2.csv')
+week3 <- read.csv('tracking_week_3.csv')
+weeks <- rbind(week1, week2, week3)
+#save(weeks, file = "weeks123.RData")
 ```
  
 Fatigue variables:
@@ -143,7 +142,7 @@ Fatigue variables:
  
 Join Data
 ```{r}
-data <- inner_join(def_line, week1, by = c("gameId", "playId", "nflId"))
+data <- inner_join(def_line, weeks, by = c("gameId", "playId", "nflId"))
 colnames(data)
 ```
 
@@ -158,17 +157,21 @@ Plot load Per Player for a game
 ```{r}
 game <- data[data$gameId == 2022090800,]
 
-for (id in unique(game$nflId)) {
+# select 5 defensive linemen at random
+ran_nflIds <- sample(game$nflId, 5)
+
+for (id in ran_nflIds) {
   player_data <- game %>% filter(nflId == id)
-  p <- ggplot(player_data, aes(x = playId, y = load)) +
+  load_plot <- ggplot(player_data, aes(x = playId, y = load)) +
     geom_point() + 
     geom_smooth(method = "loess", color = "blue") + 
     labs(x = "Play ID", y = "Load", title = paste0("Player Load in Game - NFL ID: ", id)) +
     theme_minimal()
 
-  print(p)
+  print(load_plot)
 }
 ```
+
 
 
 ```{r Tackles over Time}
@@ -209,4 +212,5 @@ stacked_bar
 # ms("15:00")- ms(penalties$gameClock)
 
 ```
+
 This doesn't show exactly what we thought. There is an increase in both types of penalties from the first to the second quarter, and an increase in formation penalties from the third to fourth quarter. We would expect some type of reset after half time, so we will also look at fatigue by quarter. This is just a plot for week 1 data so it's not totally representative of the season or the "NFL" in general.
