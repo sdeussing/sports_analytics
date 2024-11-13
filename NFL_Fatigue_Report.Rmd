@@ -100,4 +100,32 @@ week1 <- read.csv('tracking_week_1.csv')
 Fatigue variables:
  - s (speed), a (acceleration), dis (distance traveled), dir (direction), o (orientation) 
  
+Join Data
+```{r}
+data <- inner_join(def_line, week1, by = c("gameId", "playId", "nflId"))
+colnames(data)
+```
+
+Player Load = Acceleration per linemen (per play)
+```{r}
+data <- data %>%
+  group_by(gameId, playId, nflId) %>%
+  mutate(load = sum(a, na.rm = TRUE)) %>% ungroup()
+```
+
+Plot load Per Player for a game
+```{r}
+game <- data[data$gameId == 2022090800,]
+
+for (id in unique(game$nflId)) {
+  player_data <- game %>% filter(nflId == id)
+  p <- ggplot(player_data, aes(x = playId, y = load)) +
+    geom_point() + 
+    geom_smooth(method = "loess", color = "blue") + 
+    labs(x = "Play ID", y = "Load", title = paste0("Player Load in Game - NFL ID: ", id)) +
+    theme_minimal()
+
+  print(p)
+}
+```
 
