@@ -170,3 +170,43 @@ for (id in unique(game$nflId)) {
 }
 ```
 
+
+```{r Tackles over Time}
+library(lubridate)
+library(tidyr)
+library(ggplot2)
+head(data)
+
+tackle_pen <- c("Horse Collar Tackle", "Defensive Holding", "Low Block", "Illegal Use of Hands", "Roughing the Passer")
+formation_pen <-  c("Illegal Shift", "Illegal Formation", "Defensive Offside")
+
+play_details <- read.csv("plays.csv") %>% select(gameId, playId, quarter, gameClock)
+head(play_details)
+
+# penalties <- play %>% select(gameId, playId, nflId, penaltyNames) %>% full_join(play_details) %>% mutate(penaltyType = ifelse(penaltyNames %in% tackle_pen, "Tackle", ifelse(penaltyNames %in% formation_pen, "Formation", NA)), totalClock = (quarter-1) *  ms("15:00") +(ms("15:00")- ms(gameClock))) 
+
+
+penalties <- play %>% select(gameId, playId, nflId, penaltyNames) %>% full_join(play_details) %>% mutate(penaltyType = ifelse(penaltyNames %in% tackle_pen, "Tackle", ifelse(penaltyNames %in% formation_pen, "Formation", NA)))
+                                                                                                         
+plot_data <- penalties %>% select(quarter, penaltyType) %>% na.omit() %>% group_by(quarter, penaltyType) %>% summarise(count = n()) %>% ungroup() 
+
+stacked_bar <- ggplot(plot_data, aes(x = as.factor(quarter), y = count, fill = penaltyType)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Penalties by Category and Quarter", x = "Quarter", y = "Count", fill = "Penalty Type") +
+  theme_minimal()
+
+stacked_bar
+
+# plot_data <- plot_data %>% na.omit()
+# plot_data <- plot_data %>% pivot_wider(names_from = penaltyType, values_from = count, values_fill = list(count = 0))
+# 
+# plot_data <- penalties %>% select(gameId, playId, penaltyType) %>% distinct() %>% arrange(gameId)
+# unique(plot_data$playId)
+# 
+# ggplot(data = plot_data) + geom_density(aes(x = totalClock, y = count, color = penaltyType))
+# tail(penalties)
+# unique(penalties$totalClock)
+# ms("15:00")- ms(penalties$gameClock)
+
+```
+This doesn't show exactly what we thought. There is an increase in both types of penalties from the first to the second quarter, and an increase in formation penalties from the third to fourth quarter. We would expect some type of reset after half time, so we will also look at fatigue by quarter. This is just a plot for week 1 data so it's not totally representative of the season or the "NFL" in general.
