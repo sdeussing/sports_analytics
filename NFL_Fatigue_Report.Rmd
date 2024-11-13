@@ -70,6 +70,9 @@ Finster-Rowen, Alex. "What is Player Load?" Catapult Sports. Catapult Sports, n.
 ## Implementation
 ```{r}
 library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(tidyr)
 ```
 
 #### Data
@@ -127,7 +130,6 @@ Variables for defensive linemen:
 summary(def_line)
 ```
 
-
 Tracking Data
 ```{r, eval = FALSE}
 week1 <- read.csv('tracking_week_1.csv')
@@ -136,29 +138,39 @@ week3 <- read.csv('tracking_week_3.csv')
 weeks <- rbind(week1, week2, week3)
 #save(weeks, file = "weeks123.RData")
 ```
- 
-Fatigue variables:
+
+The following variables from the tracking data can be used to calculate fatigue:
  - s (speed), a (acceleration), dis (distance traveled), dir (direction), o (orientation) 
  
 Join Data
-```{r}
+```{r, eval= FALSE}
 data <- inner_join(def_line, weeks, by = c("gameId", "playId", "nflId"))
-colnames(data)
+#save(data, file = "joinedData.RData")
 ```
 
-Player Load = Acceleration per linemen (per play)
 ```{r}
+load("joinedData.RData")
+colnames(data)
+head(data)
+```
+
+#### Exploratory Analysis/Visualizations
+
+Our first derived variable is player load. We will calculate load on a per-play level.
+Player Load = SUM(Acceleration)
+```{r calculate load}
 data <- data %>%
   group_by(gameId, playId, nflId) %>%
   mutate(load = sum(a, na.rm = TRUE)) %>% ungroup()
 ```
 
-Plot load Per Player for a game
-```{r}
+Load Per Player
+```{r load per player plot}
 game <- data[data$gameId == 2022090800,]
 
-# select 5 defensive linemen at random
-ran_nflIds <- sample(game$nflId, 5)
+# select 10 defensive linemen at random
+set.seed(456)
+ran_nflIds <- sample(game$nflId, 10)
 
 for (id in ran_nflIds) {
   player_data <- game %>% filter(nflId == id)
@@ -172,14 +184,14 @@ for (id in ran_nflIds) {
 }
 ```
 
+We hypothesized that total load would decrease later in the game because a player would be more fatigues. For most of the linemen, we don't see a decline in load throughout the game. These players either remain at a almost steady load value or increase slightly towards the end of the game. This trend could be the result of a break at halftime or a higher-intensity end to a game. 
 
+In addition to calculating total load using the sum of accelerations, we can also look at the change in the fatigue analysis of a player. This measure will incorporate both player speed and acceleration during the play.
 
+With our fatigue analysis, we will also be looking at the outcome of the play. We have divided penalties into two main categories: tacklle penalties (which happen during the play) and formation penalites (which happen before the play).
+
+Penalties Throughout a Game
 ```{r Tackles over Time}
-library(lubridate)
-library(tidyr)
-library(ggplot2)
-head(data)
-
 tackle_pen <- c("Horse Collar Tackle", "Defensive Holding", "Low Block", "Illegal Use of Hands", "Roughing the Passer")
 formation_pen <-  c("Illegal Shift", "Illegal Formation", "Defensive Offside")
 
