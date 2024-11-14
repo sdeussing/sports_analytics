@@ -73,6 +73,7 @@ library(dplyr)
 library(ggplot2)
 library(lubridate)
 library(tidyr)
+library(gridExtra)
 ```
 
 #### Data
@@ -88,11 +89,11 @@ Filter to only defensive linemen.
 - NT (Nose Tackle)
 
 ```{r make def line}
-def_line <- player_data[player_data$position == 'DE' | player_data$position == 'DT' |
+def_line_players <- player_data[player_data$position == 'DE' | player_data$position == 'DT' |
                           player_data$position == 'NT',]
 
 def_line <- play %>%
-  left_join(def_line[, c("nflId", "position")], by = "nflId")
+  left_join(def_line_players[, c("nflId", "position")], by = "nflId")
 
 def_line <- def_line %>%
   select(-c('hadRushAttempt', 'rushingYards', 'hadDropback', 'passingYards', 'sackYardsAsOffense',
@@ -149,9 +150,9 @@ data <- inner_join(def_line, weeks, by = c("gameId", "playId", "nflId"))
 ```
 
 ```{r}
-load("joinedData.RData")
-colnames(data)
-head(data)
+# load("joinedData.RData")
+# colnames(data)
+# head(data)
 ```
 
 #### Exploratory Analysis/Visualizations
@@ -188,7 +189,53 @@ We hypothesized that total load would decrease later in the game because a playe
 
 In addition to calculating total load using the sum of accelerations, we can also look at the change in the fatigue analysis of a player. This measure will incorporate both player speed and acceleration during the play.
 
-With our fatigue analysis, we will also be looking at the outcome of the play. We have divided penalties into two main categories: tacklle penalties (which happen during the play) and formation penalites (which happen before the play).
+With our fatigue analysis, we will also be looking at the outcome of the play. We have divided penalties into two main categories: tackle penalties (which happen during the play) and formation penalties (which happen before the play).
+
+
+Effect of Demographics on Median Acceleration
+```{r}
+max_acc <- data %>% group_by(nflId) %>% mutate(max_acc = mean(a)) %>% select(nflId, max_acc) %>% distinct()
+demographic <- max_acc %>% inner_join(def_line_players)
+demographic$birthDate <- as.Date(demographic$birthDate)
+
+
+# Function to convert feet-inches to centimeters 
+convert_to_cm <- function(height)
+  { height_parts <- strsplit(height, "-")[[1]] 
+  feet <- as.numeric(height_parts[1]) 
+  inches <- as.numeric(height_parts[2]) 
+  total_inches <- feet * 12 + inches 
+  total_cm <- total_inches * 2.54 
+  return(total_cm) } # Apply the conversion to the height column 
+
+demographic$height <- sapply(demographic$height, convert_to_cm)
+
+demographic <- demographic %>% na.omit() %>% mutate(age = as.integer(round(as.Date(now()) - birthDate)/365))
+
+# Scatter plot for age vs x
+plot_age <- ggplot(demographic, aes(x = age, y = max_acc)) +
+  geom_point() +
+  labs(title = "Age vs Acceleration", x = "Age", y = "Avg Acceleration") +
+  theme_minimal() +geom_smooth()
+
+# Scatter plot for height vs x
+plot_height <- ggplot(demographic, aes(x = height, y = max_acc)) +
+  geom_point() +
+  labs(title = "Height vs Acceleration", x = "Height", y = "Avg Acceleration") +
+  theme_minimal() +geom_smooth()
+
+# Scatter plot for weight vs x
+plot_weight <- ggplot(demographic, aes(x = weight, y = max_acc)) +
+  geom_point() +
+  labs(title = "Weight vs Acceleration", x = "Weight", y = "Avg Acceleration") +
+  theme_minimal() +geom_smooth()
+
+grid.arrange(plot_age, plot_height, plot_weight, nrow = 1)
+
+```
+As one of the points of our analysis is to look for key factors that affect fatigue-resistant, we plotted the relationship between age, height and weight and median acceleration. As acceleration will be included in our derivation for "fatigue", we thought it would be interesting to see these relationships.
+
+We would have thought as players get older and larger that acceleration decreases. However this was not the case, with only weight showing a marginally negative correlation. This probably means that other factors such as match-up and time played/time since last TO are more important factors.
 
 Penalties Throughout a Game
 ```{r Tackles over Time}
