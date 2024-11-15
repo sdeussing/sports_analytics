@@ -1,8 +1,10 @@
 ---
-title: "NFL_Fatigue_Analysis"
-author: "Sarah Deussing"
+title: "NFL Fatigue Analysis in Defensive Linemen"
+author: "Sarah Deussing & Imogen Meers"
 date: "2024-11-11"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ## Motivation
@@ -132,7 +134,7 @@ summary(def_line)
 ```
 
 Tracking Data
-```{r, eval = FALSE}
+```{r}
 week1 <- read.csv('tracking_week_1.csv')
 week2 <- read.csv('tracking_week_2.csv')
 week3 <- read.csv('tracking_week_3.csv')
@@ -144,7 +146,7 @@ The following variables from the tracking data can be used to calculate fatigue:
  - s (speed), a (acceleration), dis (distance traveled), dir (direction), o (orientation) 
  
 Join Data
-```{r, eval= FALSE}
+```{r}
 data <- inner_join(def_line, weeks, by = c("gameId", "playId", "nflId"))
 #save(data, file = "joinedData.RData")
 ```
