@@ -157,15 +157,35 @@ data <- inner_join(def_line, weeks, by = c("gameId", "playId", "nflId"))
 # head(data)
 ```
 
-#### Exploratory Analysis/Visualizations
+#### Derived Variables
 
-Our first derived variable is player load. We will calculate load on a per-play level.
+Our derived variables will be calculated on a per-play level.
 Player Load = SUM(Acceleration)
+Max Acceleration = MAX(Acceleration)
 ```{r calculate load}
 data <- data %>%
+  filter(frameType != 'BEFORE_SNAP') %>%
   group_by(gameId, playId, nflId) %>%
-  mutate(load = sum(a, na.rm = TRUE)) %>% ungroup()
+  mutate(load = sum(a, na.rm = TRUE),
+         max_acc = max(a)) %>% ungroup()
+
+head(data)
 ```
+
+Cumulative Load = CUMSUM(load)
+```{r}
+per_play <- data %>%
+  select(gameId, playId, nflId, load, teamAbbr, position, max_acc) %>% distinct() %>%
+  arrange(gameId, nflId, playId)
+#head(per_play)
+
+per_play <- per_play %>%
+  group_by(gameId, nflId) %>%
+  mutate(cum_load = cumsum(load))
+head(per_play)
+```
+
+#### Exploratory Analysis/Visualizations
 
 Load Per Player
 ```{r load per player plot}
@@ -176,7 +196,7 @@ set.seed(456)
 ran_nflIds <- sample(game$nflId, 10)
 
 for (id in ran_nflIds) {
-  player_data <- game %>% filter(nflId == id)
+  player_data <- game %>% filter(nflId == id) %>% filter(frameId <= 160)
   load_plot <- ggplot(player_data, aes(x = playId, y = load)) +
     geom_point() + 
     geom_smooth(method = "loess", color = "blue") + 
@@ -189,10 +209,43 @@ for (id in ran_nflIds) {
 
 We hypothesized that total load would decrease later in the game because a player would be more fatigues. For most of the linemen, we don't see a decline in load throughout the game. These players either remain at a almost steady load value or increase slightly towards the end of the game. This trend could be the result of a break at halftime or a higher-intensity end to a game. 
 
+Let's instead look at cumulative load over a game. 
+```{r}
+game <- per_play[per_play$gameId == 2022090800,]
+
+# select 10 defensive linemen at random
+set.seed(456)
+ran_nflIds <- sample(game$nflId, 10)
+
+for (id in ran_nflIds) {
+  player_data <- game %>% filter(nflId == id)
+  c_load_plot <- ggplot(player_data, aes(x = playId, y = cum_load)) +
+    geom_smooth(method = "loess", color = "blue") + 
+    labs(x = "Play ID", y = "Cumulative Load", title = paste0("Player Cum. Load in Game - NFL ID: ", id)) +
+    theme_minimal()
+
+  print(c_load_plot)
+}
+```
+
+
 In addition to calculating total load using the sum of accelerations, we can also look at the change in the fatigue analysis of a player. This measure will incorporate both player speed and acceleration during the play.
 
-With our fatigue analysis, we will also be looking at the outcome of the play. We have divided penalties into two main categories: tackle penalties (which happen during the play) and formation penalties (which happen before the play).
+Fatigue Index
+```{r}
+for (id in ran_nflIds) {
+  player_data <- game %>% filter(nflId == id) %>% filter(frameType != "BEFORE_SNAP") %>% mutate(fatigueIndex = a/s)
+  load_plot <- ggplot(player_data, aes(x = playId, y = fatigueIndex)) +
+    geom_point() + 
+    geom_smooth(method = "loess", color = "blue") + 
+    labs(x = "Play ID", y = "Load", title = paste0("Player Fatigue Index in Game - NFL ID: ", id)) +
+    theme_minimal()
 
+  print(load_plot)
+}
+```
+
+Player height and weight may also have a relationship with acceleration. Let's visualize this relationship.
 
 Effect of Demographics on Median Acceleration
 ```{r}
@@ -235,9 +288,12 @@ plot_weight <- ggplot(demographic, aes(x = weight, y = max_acc)) +
 grid.arrange(plot_age, plot_height, plot_weight, nrow = 1)
 
 ```
+
 As one of the points of our analysis is to look for key factors that affect fatigue-resistant, we plotted the relationship between age, height and weight and median acceleration. As acceleration will be included in our derivation for "fatigue", we thought it would be interesting to see these relationships.
 
 We would have thought as players get older and larger that acceleration decreases. However this was not the case, with only weight showing a marginally negative correlation. This probably means that other factors such as match-up and time played/time since last TO are more important factors.
+
+With our fatigue analysis, we will also be looking at the outcome of the play. We have divided penalties into two main categories: tackle penalties (which happen during the play) and formation penalties (which happen before the play).
 
 Penalties Throughout a Game
 ```{r Tackles over Time}
@@ -275,3 +331,32 @@ stacked_bar
 ```
 
 This doesn't show exactly what we thought. There is an increase in both types of penalties from the first to the second quarter, and an increase in formation penalties from the third to fourth quarter. We would expect some type of reset after half time, so we will also look at fatigue by quarter. This is just a plot for week 1 data so it's not totally representative of the season or the "NFL" in general.
+
+Let's dive further into these acceleration values. Within one play, we want to look at the change in acceleration and load. We will split the data by position to see any potential positional differences.
+
+Load Per Play
+```{r}
+ran_play <- data %>%
+  filter(gameId == 2022090800) %>%
+  filter(playId == 56) %>%
+  filter(frameType != "BEFORE_SNAP") %>%
+  filter(!is.na(position)) %>%
+  filter(frameId <= 155) %>%
+  mutate(fatigueIndex = a/s)
+ggplot(ran_play, aes(x=frameId, y = fatigueIndex, color = position)) + geom_point() + geom_smooth()
+```
+
+Acceleration Per Play
+```{r}
+ran_play2 <- data %>%
+  filter(gameId == 2022090800) %>%
+  filter(playId == 56) %>%
+  filter(frameType != "BEFORE_SNAP") %>%
+  filter(!is.na(position)) %>%
+  filter(frameId <= 160)
+ggplot(ran_play2, aes(x=frameId, y = a, color = position)) + geom_point() + geom_smooth()
+```
+
+- change in max acceleration over a game --> per play level (per player)
+- cumulative load over a game (add load each play) --> per play level (per player) 
+  - don't restrict frame
