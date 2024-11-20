@@ -153,13 +153,39 @@ data <- inner_join(def_line, weeks, by = c("gameId", "playId", "nflId"))
 
 ```{r}
 # load("joinedData.RData")
-# colnames(data)
-# head(data)
+colnames(data)
+head(data)
+```
+
+Two variables of importance are a player's load and fatigue index, which is equal to acceleration/speed. Let's visualize these for one player in one play. We want to look at movement only during/after the ball is snapped. We will filter the frameId to be within a small range of the snap and initial acceleration.
+
+Load Per Play
+```{r}
+ran_play <- data %>%
+  filter(gameId == 2022090800) %>%
+  filter(playId == 56) %>%
+  filter(frameType != "BEFORE_SNAP") %>%
+  filter(!is.na(position)) %>%
+  filter(frameId <= 155) %>%
+  mutate(fatigueIndex = a/s)
+ggplot(ran_play, aes(x=frameId, y = fatigueIndex, color = position)) + geom_point() + geom_smooth()
+```
+
+Acceleration Per Play
+```{r}
+ran_play2 <- data %>%
+  filter(gameId == 2022090800) %>%
+  filter(playId == 56) %>%
+  filter(frameType != "BEFORE_SNAP") %>%
+  filter(!is.na(position)) %>%
+  filter(frameId <= 160)
+ggplot(ran_play2, aes(x=frameId, y = a, color = position)) + geom_point() + geom_smooth()
 ```
 
 #### Derived Variables
 
 Our derived variables will be calculated on a per-play level.
+
 Player Load = SUM(Acceleration)
 Max Acceleration = MAX(Acceleration)
 ```{r calculate load}
@@ -173,7 +199,7 @@ head(data)
 ```
 
 Cumulative Load = CUMSUM(load)
-```{r}
+```{r calculate cumulative load}
 per_play <- data %>%
   select(gameId, playId, nflId, load, teamAbbr, position, max_acc) %>% distinct() %>%
   arrange(gameId, nflId, playId)
@@ -227,7 +253,6 @@ for (id in ran_nflIds) {
   print(c_load_plot)
 }
 ```
-
 
 In addition to calculating total load using the sum of accelerations, we can also look at the change in the fatigue analysis of a player. This measure will incorporate both player speed and acceleration during the play.
 
@@ -294,12 +319,14 @@ As one of the points of our analysis is to look for key factors that affect fati
 We would have thought as players get older and larger that acceleration decreases. However this was not the case, with only weight showing a marginally negative correlation. This probably means that other factors such as match-up and time played/time since last TO are more important factors.
 
 With our fatigue analysis, we will also be looking at the outcome of the play. We have divided penalties into two main categories: tackle penalties (which happen during the play) and formation penalties (which happen before the play).
+```{r penalties}
+tackle_pen <- c("Horse Collar Tackle", "Defensive Holding", "Low Block", "Illegal Use of Hands", "Roughing the Passer")
+formation_pen <-  c("Illegal Shift", "Illegal Formation", "Defensive Offside")
+```
+
 
 Penalties Throughout a Game
 ```{r Tackles over Time}
-tackle_pen <- c("Horse Collar Tackle", "Defensive Holding", "Low Block", "Illegal Use of Hands", "Roughing the Passer")
-formation_pen <-  c("Illegal Shift", "Illegal Formation", "Defensive Offside")
-
 play_details <- read.csv("plays.csv") %>% select(gameId, playId, quarter, gameClock)
 head(play_details)
 
@@ -332,31 +359,110 @@ stacked_bar
 
 This doesn't show exactly what we thought. There is an increase in both types of penalties from the first to the second quarter, and an increase in formation penalties from the third to fourth quarter. We would expect some type of reset after half time, so we will also look at fatigue by quarter. This is just a plot for week 1 data so it's not totally representative of the season or the "NFL" in general.
 
-Let's dive further into these acceleration values. Within one play, we want to look at the change in acceleration and load. We will split the data by position to see any potential positional differences.
+#### Clustering Analysis
+We are going to cluster players based on their:
+  - cumulative load
+  - fatigueIndex
+  - number of penalties
+  - height
+  - weight
+  - age
+  - max. acceleration
 
-Load Per Play
 ```{r}
-ran_play <- data %>%
-  filter(gameId == 2022090800) %>%
-  filter(playId == 56) %>%
-  filter(frameType != "BEFORE_SNAP") %>%
-  filter(!is.na(position)) %>%
-  filter(frameId <= 155) %>%
-  mutate(fatigueIndex = a/s)
-ggplot(ran_play, aes(x=frameId, y = fatigueIndex, color = position)) + geom_point() + geom_smooth()
+# for each gameId, playId, nflId group: if any of the penalties match a value in tackle or formation penalties, set this value to 1
+total_penalties <- function(penaltyNames, tackle_pen, formation_pen) {
+  tacklePenalty = ifelse(any(penaltyNames %in% tackle_pen), 1, 0)
+  formationPenalty = ifelse(any(penaltyNames %in% formation_pen), 1, 0)
+  return(c(tacklePenalty, formationPenalty))
+}
+
+grouped <- data %>%
+  group_by(gameId, playId, nflId) %>%
+  mutate(
+    penalty_values = list(total_penalties(penaltyNames, tackle_pen, formation_pen)),
+    tackle_pen = penalty_values[[1]][1], 
+    formation_pen = penalty_values[[1]][2],
+    avg_fatigueIndex = sum(mean(a)/mean(s))) %>%
+  select(gameId, playId, nflId, displayName, frameId, load, max_acc, penalty_values, tackle_pen, formation_pen, avg_fatigueIndex)
 ```
 
-Acceleration Per Play
-```{r}
-ran_play2 <- data %>%
-  filter(gameId == 2022090800) %>%
-  filter(playId == 56) %>%
-  filter(frameType != "BEFORE_SNAP") %>%
-  filter(!is.na(position)) %>%
-  filter(frameId <= 160)
-ggplot(ran_play2, aes(x=frameId, y = a, color = position)) + geom_point() + geom_smooth()
+```{r, eval=FALSE}
+# check
+grouped %>%
+  filter(tackle_pen == 1 | formation_pen == 1)
 ```
 
-- change in max acceleration over a game --> per play level (per player)
-- cumulative load over a game (add load each play) --> per play level (per player) 
-  - don't restrict frame
+We need to add cumulative load and fatigueIndex to this dataset, making it on a per-play level.
+```{r}
+test <- grouped %>%
+  select(gameId, playId, nflId, load, displayName, max_acc, tackle_pen, formation_pen, avg_fatigueIndex) %>%
+  distinct() %>%
+  arrange(gameId, nflId, playId)
+
+test <- test %>%
+  group_by(gameId, nflId) %>%
+  mutate(cum_load = cumsum(load))
+
+head(test)
+```
+
+We also need to add player height, weight, and age.
+```{r}
+test <- test %>%
+  left_join(player_data[, c("nflId", "height", "weight", "birthDate")], by = "nflId")
+```
+
+Now that we have a dataset with the necessary values for our clustering, we need to clean the height and birthDate columns. We will change height to an numeric inches value and birthDate to a numerical age.
+```{r}
+# height conversion
+class(test$height)
+convert_to_inches <- function(height_str) {
+  parts <- strsplit(height_str, "-")[[1]]
+  feet <- as.numeric(parts[1])
+  inches <- as.numeric(parts[2])
+  total_inches <- (feet * 12) + inches
+  return(total_inches)
+}
+test$height <- sapply(test$height, convert_to_inches)
+
+# birthDate conversion
+class(test$birthDate)
+convert_to_age <- function(birthdate) {
+  birthdate <- as.Date(birthdate, format = "%Y-%m-%d")
+  date <- Sys.Date()
+  age <- as.numeric(difftime(Sys.Date(), birthdate, units = "weeks")) / 52.25
+  return(floor(age))
+}
+test$age <- convert_to_age(test$birthDate)
+```
+
+Select Columns to Cluster
+```{r select cols}
+clustering_columns <- c("max_acc", "tackle_pen", "formation_pen", "avg_fatigueIndex", "cum_load", "height", "weight", "age", "load")
+```
+
+
+```{r make df}
+players <- unique(test$displayName)
+
+res <- as.data.frame(matrix(NA, nrow = length(players), ncol = 13))
+
+for(i in 1:length(players)){
+  temp <- test[which(test$displayName == players[i])]
+  
+  res[i, 1:9] <- colMeans(temp[, clustering_columns], na.rm = TRUE)
+  res[i, 10] <- max(temp$max_acc, na.rm = TRUE)
+  res[i, 11] <- sum(temp$tackle_pen, na.rm = TRUE)
+  res[i, 12] <- sum(temp$formation_pen, na.rm = TRUE)
+  res[i, 13] <- max(temp$cum_load, na.rm = TRUE)
+}
+
+names(res) <- c(clustering_columns, "max_acc_max", "total_tackle_pen", "total_formation_pen", 
+                "max_cum_load_in_game")
+```
+
+
+
+
+
