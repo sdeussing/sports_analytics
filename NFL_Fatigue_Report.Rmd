@@ -76,6 +76,7 @@ library(ggplot2)
 library(lubridate)
 library(tidyr)
 library(gridExtra)
+library(dendextend)
 ```
 
 #### Data
@@ -442,14 +443,14 @@ Select Columns to Cluster
 clustering_columns <- c("max_acc", "tackle_pen", "formation_pen", "avg_fatigueIndex", "cum_load", "height", "weight", "age", "load")
 ```
 
-
+Our dataframe for clustering with include one row per player in our dataset and include 13 metrics.
 ```{r make df}
 players <- unique(test$displayName)
 
 res <- as.data.frame(matrix(NA, nrow = length(players), ncol = 13))
 
 for(i in 1:length(players)){
-  temp <- test[which(test$displayName == players[i])]
+  temp <- test[which(test$displayName == players[i]), ]
   
   res[i, 1:9] <- colMeans(temp[, clustering_columns], na.rm = TRUE)
   res[i, 10] <- max(temp$max_acc, na.rm = TRUE)
@@ -460,8 +461,46 @@ for(i in 1:length(players)){
 
 names(res) <- c(clustering_columns, "max_acc_max", "total_tackle_pen", "total_formation_pen", 
                 "max_cum_load_in_game")
+
+rownames(res) <- players
 ```
 
+Scale clustering data
+```{r}
+sdata <- scale(res)
+
+# Calculate distances between points
+dist_mat <- dist(sdata, # Set data set
+                 method = "euclidean") # Set distance measure to use
+```
+
+Hierarchial Clustering
+```{r}
+# Run hierarchical clustering
+hc <- hclust(dist_mat, # Set distance matrix to use 
+              method = "ward.D2" ) # Set linkage measure to use
+```
+
+Dendogram
+```{r}
+# Create dendrogram
+dend <- as.dendrogram(hc)
+# order it the closest we can to the order of the observations:
+dend <- rotate(dend, 1:nrow(sdata))
+
+# Color the branches based on the clusters:
+dend <- color_branches(dend, k=10) 
+
+# We hang the dendrogram a bit:
+dend <- hang.dendrogram(dend,hang_height=0.1)
+# reduce the size of the labels:
+dend <- set(dend, "labels_cex", 0.55)
+# And plot:
+par(mar = c(3,3,3,7))
+plot(dend, 
+     main = "Clustered Defensive Linemen Players",
+     horiz =  TRUE,  nodePar = list(cex = .007))
+```
 
 
 
