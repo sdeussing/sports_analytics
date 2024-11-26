@@ -444,14 +444,26 @@ convert_to_age <- function(birthdate) {
 test$age <- convert_to_age(test$birthDate)
 ```
 
+We want to analyze only players that occur many times in the dataset. We will eliminate players that only have a few total entries in the dataset, as these are not the starting players.
+```{r}
+players_top <- test %>% ungroup() %>% select(displayName) %>%
+  group_by(displayName) %>% mutate(count = n()) %>% distinct()
+nrow(players_top)
+players_top <- players_top %>% filter(count >= 100)
+nrow(players_top)
+```
+
+By selecting players with over 100 instances in the dataset, we have cut our dataset by over 50%. Selecting only these players will eliminate outliers - instances in which a player had only a few movements in a game.
+
 Select Columns to Cluster.
 ```{r select cols}
 clustering_columns <- c("max_acc", "avg_fatigueIndex", "cum_load", "height", "weight", "age", "load")
 ```
 
+
 Our dataframe for clustering with include one row per player in our dataset and include 12 metrics.
 ```{r make df}
-players <- unique(test$displayName)
+players <- unique(players_top$displayName)
 
 res <- as.data.frame(matrix(NA, nrow = length(players), ncol = 10))
 
@@ -506,23 +518,24 @@ library(factoextra)
 fviz_gap_stat(gapData)
 ```
 
-Here, we see that the optimal number of clusters is 8.
+Here, we see that the optimal number of clusters is only 2, but we will continue with three clusters to further see disparity between them.
 
 Let's now run k-means clustering on the data.
 ```{r}
 set.seed(12345) 
-# 4 Clusters
+
 fit <- kmeans(x = sdata,
-                centers = 5, 
+                centers = 3, 
                 nstart = 25, 
                 iter.max = 100)
 clusters <- fit$cluster
 centers <- fit$centers
 summary(as.factor(clusters))
 ```
-Let's move forward with four clusters.
+
+Let's move forward with three clusters.
 ```{r}
-cluster <- c(1:5)
+cluster <- c(1:3)
 center_df <- data.frame(cluster, centers)
 
 center_reshape <- gather(center_df, features, values, avg_max_acc:avg_fatigueIndex)
@@ -552,5 +565,26 @@ heatmap
 
 Now, we can add total penalties to the clusters.
 
-- cluster membership then total penalties
-- if there is still a bad column, drop bench players --> n. plays involved in
+First, let's assign cluster number to player name.
+```{r}
+player_clusts <- data.frame(player_name = players, cluster = clusters)
+rownames(player_clusts) <- NULL
+```
+
+
+```{r}
+sum_pen <- as.data.frame(matrix(NA, nrow = nrow(player_clusts), ncol = 2))
+
+for(i in 1:nrow(player_clusts)){
+  temp <- test[which(test$displayName == player_clusts$player_name[i]), ]
+  
+  sum_pen[i, 1] <- sum(temp$tackle_pen, na.rm = TRUE)
+  sum_pen[i, 2] <- sum(temp$formation_pen, na.rm = TRUE)
+}
+
+colnames(sum_pen) <- c("total_tackle_pen", "total_formation_pen")
+sum_pen <- cbind(player_clusts, sum_pen)
+```
+
+Now that we have a sum of penalties for each player, we can count this total for each cluster and add it to our heatmap.
+
