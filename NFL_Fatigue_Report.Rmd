@@ -444,7 +444,7 @@ convert_to_age <- function(birthdate) {
 test$age <- convert_to_age(test$birthDate)
 ```
 
-Select Columns to Cluster
+Select Columns to Cluster.
 ```{r select cols}
 clustering_columns <- c("max_acc", "avg_fatigueIndex", "cum_load", "height", "weight", "age", "load")
 ```
@@ -453,21 +453,18 @@ Our dataframe for clustering with include one row per player in our dataset and 
 ```{r make df}
 players <- unique(test$displayName)
 
-res <- as.data.frame(matrix(NA, nrow = length(players), ncol = 12))
+res <- as.data.frame(matrix(NA, nrow = length(players), ncol = 10))
 
 for(i in 1:length(players)){
   temp <- test[which(test$displayName == players[i]), ]
   
-  res[i, 1:7] <- colMeans(temp[, clustering_columns], na.rm = TRUE)
-  res[i, 8] <- max(temp$max_acc, na.rm = TRUE)
-  res[i, 9] <- sum(temp$tackle_pen, na.rm = TRUE)
-  res[i, 10] <- sum(temp$formation_pen, na.rm = TRUE)
-  res[i, 11] <- max(temp$cum_load, na.rm = TRUE)
-  res[i, 12] <- max(temp$avg_fatigueIndex, na.rm = TRUE)
+  res[i, 1:7] <- colMeans(temp[, clustering_columns], na.rm = TRUE) #average of all columns above
+  res[i, 8] <- max(temp$max_acc, na.rm = TRUE) # max of max acceleration
+  res[i, 9] <- max(temp$cum_load, na.rm = TRUE) # max of cumulative load
+  res[i, 10] <- max(temp$avg_fatigueIndex, na.rm = TRUE) # max of average fatigue index
 }
 
-names(res) <- c("avg_max_acc", "avg_fatigueIndex", "avg_cum_load", "height", "weight", "age", "avg_load", "max_acc_max", "total_tackle_pen", "total_formation_pen", 
-                "max_cum_load_in_game", "max_avg_fatigueIndex")
+names(res) <- c("avg_max_acc", "avg_fatigueIndex", "avg_cum_load", "height", "weight", "age", "avg_load", "max_acc_max", "max_cum_load_in_game", "max_avg_fatigueIndex")
 
 rownames(res) <- players
 ```
@@ -509,30 +506,28 @@ library(factoextra)
 fviz_gap_stat(gapData)
 ```
 
-Here, we see that the optimal number of clusters is 9.
+Here, we see that the optimal number of clusters is 8.
 
 Let's now run k-means clustering on the data.
 ```{r}
 set.seed(12345) 
 # 4 Clusters
-fit9 <- kmeans(x = sdata,
-                centers = 9, 
+fit <- kmeans(x = sdata,
+                centers = 5, 
                 nstart = 25, 
                 iter.max = 100)
-clusters9 <- fit9$cluster
-centers9 <- fit9$centers
-summary(as.factor(clusters9))
+clusters <- fit$cluster
+centers <- fit$centers
+summary(as.factor(clusters))
 ```
 Let's move forward with four clusters.
 ```{r}
-cluster <- c(1:9)
-center_df <- data.frame(cluster, centers9)
+cluster <- c(1:5)
+center_df <- data.frame(cluster, centers)
 
 center_reshape <- gather(center_df, features, values, avg_max_acc:avg_fatigueIndex)
 ```
-```{r}
-centers9
-```
+
 
 Heatmap
 ```{r}
@@ -554,6 +549,8 @@ heatmap <- ggplot(data = center_reshape,
 
 heatmap
 ```
+
+Now, we can add total penalties to the clusters.
 
 - cluster membership then total penalties
 - if there is still a bad column, drop bench players --> n. plays involved in
