@@ -70,7 +70,7 @@ Finster-Rowen, Alex. "What is Player Load?" Catapult Sports. Catapult Sports, n.
 
 
 ## Implementation
-```{r}
+```{r libraries}
 library(dplyr)
 library(ggplot2)
 library(lubridate)
@@ -135,7 +135,7 @@ summary(def_line)
 ```
 
 Tracking Data
-```{r}
+```{r load data}
 week1 <- read.csv('tracking_week_1.csv')
 week2 <- read.csv('tracking_week_2.csv')
 week3 <- read.csv('tracking_week_3.csv')
@@ -147,7 +147,7 @@ The following variables from the tracking data can be used to calculate fatigue:
  - s (speed), a (acceleration), dis (distance traveled), dir (direction), o (orientation) 
  
 Join Data
-```{r}
+```{r join}
 data <- inner_join(def_line, weeks, by = c("gameId", "playId", "nflId"))
 #save(data, file = "joinedData.RData")
 ```
@@ -161,7 +161,7 @@ head(data)
 Two variables of importance are a player's load and fatigue index, which is equal to acceleration/speed. Let's visualize these for one player in one play. We want to look at movement only during/after the ball is snapped. We will filter the frameId to be within a small range of the snap and initial acceleration.
 
 Load Per Play
-```{r}
+```{r load per play}
 ran_play <- data %>%
   filter(gameId == 2022090800) %>%
   filter(playId == 56) %>%
@@ -173,7 +173,7 @@ ggplot(ran_play, aes(x=frameId, y = fatigueIndex, color = position)) + geom_poin
 ```
 
 Acceleration Per Play
-```{r}
+```{r acc per play}
 ran_play2 <- data %>%
   filter(gameId == 2022090800) %>%
   filter(playId == 56) %>%
@@ -237,7 +237,7 @@ for (id in ran_nflIds) {
 We hypothesized that total load would decrease later in the game because a player would be more fatigues. For most of the linemen, we don't see a decline in load throughout the game. These players either remain at a almost steady load value or increase slightly towards the end of the game. This trend could be the result of a break at halftime or a higher-intensity end to a game. 
 
 Let's instead look at cumulative load over a game. 
-```{r}
+```{r cum load over game plot}
 game <- per_play[per_play$gameId == 2022090800,]
 
 # select 10 defensive linemen at random
@@ -258,7 +258,7 @@ for (id in ran_nflIds) {
 In addition to calculating total load using the sum of accelerations, we can also look at the change in the fatigue analysis of a player. This measure will incorporate both player speed and acceleration during the play.
 
 Fatigue Index
-```{r}
+```{r fatigue index calc}
 for (id in ran_nflIds) {
   player_data <- game %>% filter(nflId == id) %>% filter(frameType != "BEFORE_SNAP") %>% mutate(fatigueIndex = a/s)
   load_plot <- ggplot(player_data, aes(x = playId, y = fatigueIndex)) +
@@ -274,7 +274,7 @@ for (id in ran_nflIds) {
 Player height and weight may also have a relationship with acceleration. Let's visualize this relationship.
 
 Effect of Demographics on Median Acceleration
-```{r}
+```{r demographics}
 max_acc <- data %>% group_by(nflId) %>% mutate(max_acc = mean(a)) %>% select(nflId, max_acc) %>% distinct()
 demographic <- max_acc %>% inner_join(def_line_players)
 demographic$birthDate <- as.Date(demographic$birthDate)
@@ -370,7 +370,7 @@ We are going to cluster players based on their:
   - age
   - max. acceleration
 
-```{r}
+```{r grouping}
 # for each gameId, playId, nflId group: if any of the penalties match a value in tackle or formation penalties, set this value to 1
 total_penalties <- function(penaltyNames, tackle_pen, formation_pen) {
   tacklePenalty = ifelse(any(penaltyNames %in% tackle_pen), 1, 0)
@@ -401,7 +401,7 @@ grouped %>%
 ```
 
 We need to add cumulative load and fatigueIndex to this dataset, making it on a per-play level.
-```{r}
+```{r per play data}
 test <- grouped %>%
   select(gameId, playId, nflId, load, displayName, max_acc, tackle_pen, formation_pen, avg_fatigueIndex) %>%
   distinct() %>%
@@ -415,13 +415,13 @@ head(test)
 ```
 
 We also need to add player height, weight, and age.
-```{r}
+```{r add demographics}
 test <- test %>%
   left_join(player_data[, c("nflId", "height", "weight", "birthDate")], by = "nflId")
 ```
 
 Now that we have a dataset with the necessary values for our clustering, we need to clean the height and birthDate columns. We will change height to an numeric inches value and birthDate to a numerical age.
-```{r}
+```{r functions}
 # height conversion
 class(test$height)
 convert_to_inches <- function(height_str) {
@@ -445,7 +445,7 @@ test$age <- convert_to_age(test$birthDate)
 ```
 
 We want to analyze only players that occur many times in the dataset. We will eliminate players that only have a few total entries in the dataset, as these are not the starting players.
-```{r}
+```{r top players}
 players_top <- test %>% ungroup() %>% select(displayName) %>%
   group_by(displayName) %>% mutate(count = n()) %>% distinct()
 nrow(players_top)
@@ -483,7 +483,7 @@ rownames(res) <- players
 
 Remove NA values (before scaling).
 All of our NA values are present in the 'age' column of our dataset. We will do so MICE imputation with the method Predictive Mean Matching ("PMM").
-```{r}
+```{r impute values}
 sum(is.na(res))
 sum(is.na(res$age))
 
@@ -495,7 +495,7 @@ sum(is.na(impute_data))
 ```
 
 Scale clustering data.
-```{r}
+```{r scale}
 # avg_fatigueIndex is already in [0,1], so it does not need to be scaled.
 unscaled_col <- impute_data$avg_fatigueIndex
 
@@ -510,7 +510,7 @@ sdata <- cbind(sdata, avg_fatigueIndex = unscaled_col)
 ```
 
 Find the optimal number of clusters for analysis.
-```{r}
+```{r optimal clusters}
 library(cluster)
 gapData <- clusGap(sdata, FUNcluster = kmeans, K.max = 15)
 
@@ -521,7 +521,7 @@ fviz_gap_stat(gapData)
 Here, we see that the optimal number of clusters is only 2, but we will continue with three clusters to further see disparity between them.
 
 Let's now run k-means clustering on the data.
-```{r}
+```{r k means}
 set.seed(12345) 
 
 fit <- kmeans(x = sdata,
@@ -534,7 +534,7 @@ summary(as.factor(clusters))
 ```
 
 Let's move forward with three clusters.
-```{r}
+```{r centers}
 cluster <- c(1:3)
 center_df <- data.frame(cluster, centers)
 
@@ -543,7 +543,7 @@ center_reshape <- gather(center_df, features, values, avg_max_acc:avg_fatigueInd
 
 
 Heatmap
-```{r}
+```{r heatmap}
 heatmap <- ggplot(data = center_reshape, 
                    aes(x = features, y = cluster, fill = values)) + 
   scale_y_continuous(breaks = seq(1, 8, by = 1)) + 
@@ -566,13 +566,12 @@ heatmap
 Now, we can add total penalties to the clusters.
 
 First, let's assign cluster number to player name.
-```{r}
+```{r player clusters}
 player_clusts <- data.frame(player_name = players, cluster = clusters)
 rownames(player_clusts) <- NULL
 ```
 
-
-```{r}
+```{r add penalties}
 sum_pen <- as.data.frame(matrix(NA, nrow = nrow(player_clusts), ncol = 2))
 
 for(i in 1:nrow(player_clusts)){
@@ -587,21 +586,52 @@ sum_pen <- cbind(player_clusts, sum_pen)
 ```
 
 Now that we have a sum of penalties for each player, we can count this total for each cluster and add it to our heatmap.
-```{r}
-totals <- as.data.frame(matrix(NA, nrow = 3, ncol = 5))
+```{r calc totals}
+totals <- as.data.frame(matrix(NA, nrow = 3, ncol = 4))
 
 for(i in 1:3){
   temp <- sum_pen[which(sum_pen$cluster == i), ]
   
   totals[i, 1] <- sum(temp$total_tackle_pen, na.rm = TRUE)
   totals[i, 2] <- sum(temp$total_formation_pen, na.rm = TRUE)
-  totals[i, 3] <- sum(nrow(temp))
-  totals[i, 4] <- sum(temp$total_tackle_pen, na.rm = TRUE)/nrow(temp)
-  totals[i, 5] <- sum(temp$total_formation_pen, na.rm = TRUE)/nrow(temp)
+  totals[i, 3] <- sum(temp$total_tackle_pen, na.rm = TRUE)/nrow(temp)
+  totals[i, 4] <- sum(temp$total_formation_pen, na.rm = TRUE)/nrow(temp)
 }
 
-colnames(totals) <- c("total_tackle_pen", "total_formation_pen", "n_players", "tackle_pen_percent",
+colnames(totals) <- c("total_tackle_pen", "total_formation_pen", "tackle_pen_percent",
                       "formation_pen_percent")
 ```
 
-add back to heatmap
+Let's add these penalty calculations back to our cluster dataframe and create a new heatmap.
+```{r new scaling}
+totals_scaled <- scale(totals)
+new_center_df <- cbind(center_df, totals_scaled)
+new_center_reshape <- gather(new_center_df, features, values, avg_max_acc:formation_pen_percent)
+```
+
+```{r new heatmap}
+heatmap2 <- ggplot(data = new_center_reshape, 
+                   aes(x = features, y = cluster, fill = values)) + 
+  scale_y_continuous(breaks = seq(1, 8, by = 1)) + 
+  geom_tile() + 
+  coord_equal() + 
+  theme_bw() + 
+  scale_fill_gradient2(low = "blue", 
+                       mid = "white", 
+                       high = "red",
+                       midpoint =0, 
+                       space = "Lab", 
+                       na.value ="grey", 
+                       guide = "colourbar", 
+                       aesthetics = "fill") + 
+  coord_flip() 
+
+heatmap2
+```
+From this clustering analysis, we see some patterns in terms of penalties.
+
+ - Cluster 3 has the highest amount/percentage of tackling penalties and the lowest percentage of formation penalties. These players have the lowest weight, age, and height, with mid-range values for load and acceleration.
+ - Cluster 2 has low penalties (in terms of total count and percentage) for both categories. These individuals have low values for load and acceleration. These individuals have the highest weight and height.
+ - Cluster 1 has the highest values for formation penalties. These individuals have low weight but are in the upper 50% for age and height, as well as acceleration. 
+ 
+In terms of fatigue, we see average fatigue index being inversely proportional to weight and height. We see a greater acceleration for players with lower height and weight - these players are able to gain speed quicker than other players, but may also get fatigued quicker.
