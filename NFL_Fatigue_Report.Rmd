@@ -202,7 +202,7 @@ head(data)
 Cumulative Load = CUMSUM(load)
 ```{r calculate cumulative load}
 per_play <- data %>%
-  select(gameId, playId, nflId, load, teamAbbr, position, max_acc) %>% distinct() %>%
+  select(gameId, playId, nflId, load, teamAbbr, position, max_acc, frameType,a, s) %>% distinct() %>%
   arrange(gameId, nflId, playId)
 #head(per_play)
 
@@ -223,8 +223,8 @@ set.seed(456)
 ran_nflIds <- sample(game$nflId, 10)
 
 for (id in ran_nflIds) {
-  player_data <- game %>% filter(nflId == id) %>% filter(frameId <= 160)
-  load_plot <- ggplot(player_data, aes(x = playId, y = load)) +
+  player_plot <- game %>% filter(nflId == id) %>% filter(frameId <= 160)
+  load_plot <- ggplot(player_plot, aes(x = playId, y = load)) +
     geom_point() + 
     geom_smooth(method = "loess", color = "blue") + 
     labs(x = "Play ID", y = "Load", title = paste0("Player Load in Game - NFL ID: ", id)) +
@@ -245,8 +245,8 @@ set.seed(456)
 ran_nflIds <- sample(game$nflId, 10)
 
 for (id in ran_nflIds) {
-  player_data <- game %>% filter(nflId == id)
-  c_load_plot <- ggplot(player_data, aes(x = playId, y = cum_load)) +
+  player_plot <- game %>% filter(nflId == id)
+  c_load_plot <- ggplot(player_plot, aes(x = playId, y = cum_load)) +
     geom_smooth(method = "loess", color = "blue") + 
     labs(x = "Play ID", y = "Cumulative Load", title = paste0("Player Cum. Load in Game - NFL ID: ", id)) +
     theme_minimal()
@@ -255,21 +255,27 @@ for (id in ran_nflIds) {
 }
 ```
 
-In addition to calculating total load using the sum of accelerations, we can also look at the change in the fatigue analysis of a player. This measure will incorporate both player speed and acceleration during the play.
+In addition to calculating total load using the sum of accelerations, we can also look at the change in the fatigue analysis of a player. This measure will incorporate both player speed and acceleration during the play. A higher fatigue index indicates a more aggressive change in speed, so we would expect fatigue index to decrease as a player gets tired (throughout a game).
 
-Fatigue Index
+Fatigue Index over a Game
 ```{r fatigue index calc}
 for (id in ran_nflIds) {
-  player_data <- game %>% filter(nflId == id) %>% filter(frameType != "BEFORE_SNAP") %>% mutate(fatigueIndex = a/s)
-  load_plot <- ggplot(player_data, aes(x = playId, y = fatigueIndex)) +
+  player_plot <- game %>% filter(nflId == id) %>% filter(frameType != "BEFORE_SNAP") %>% mutate(fatigueIndex = a/s) %>% filter(is.numeric(fatigueIndex) & !(fatigueIndex == Inf)) %>% mutate(avgFI = mean(fatigueIndex)) %>% group_by(playId) %>% mutate(maxFI = max(fatigueIndex), countFI =sum(fatigueIndex >= avgFI)) %>% #countFI is a count per play that the fatigue index is over the average fatigue index per the game
+    select(playId, countFI, maxFI) %>% distinct()
+  load_plot <- ggplot(player_plot, aes(x = playId, y = maxFI)) +
     geom_point() + 
     geom_smooth(method = "loess", color = "blue") + 
-    labs(x = "Play ID", y = "Load", title = paste0("Player Fatigue Index in Game - NFL ID: ", id)) +
+    labs(x = "Play ID", y = "Max FI", title = paste0("Player Fatigue Index in Game - NFL ID: ", id)) +
     theme_minimal()
 
   print(load_plot)
 }
 ```
+There is some variation across players regarding their change in max fatigue index. Whilst some do go down as the game goes on, there are others that stay level or even increase towards the end of the game.
+
+It is worth noting this is just one game and a random sample of players so it is very individualized. Once we generalize the data across all games and all players, we would hope to see more of a trend.
+
+
 
 Player height and weight may also have a relationship with acceleration. Let's visualize this relationship.
 
@@ -321,7 +327,7 @@ We would have thought as players get older and larger that acceleration decrease
 
 With our fatigue analysis, we will also be looking at the outcome of the play. We have divided penalties into two main categories: tackle penalties (which happen during the play) and formation penalties (which happen before the play).
 ```{r penalties}
-tackle_pen <- c("Horse Collar Tackle", "Defensive Holding", "Low Block", "Illegal Use of Hands", "Roughing the Passer")
+tackle_pen <- c("Horse Collar Tackle", "Defensive Holding", "Low Block", "Illegal Use of Hands", "Roughing the Passer", "Face Mask")
 formation_pen <-  c("Illegal Shift", "Illegal Formation", "Defensive Offside")
 ```
 
@@ -361,10 +367,11 @@ stacked_bar
 This doesn't show exactly what we thought. There is an increase in both types of penalties from the first to the second quarter, and an increase in formation penalties from the third to fourth quarter. We would expect some type of reset after half time, so we will also look at fatigue by quarter. This is just a plot for week 1 data so it's not totally representative of the season or the "NFL" in general.
 
 #### Clustering Analysis
+##### Part 1
+
 We are going to cluster players based on their:
   - cumulative load
   - fatigueIndex
-  - number of penalties
   - height
   - weight
   - age
@@ -380,17 +387,30 @@ total_penalties <- function(penaltyNames, tackle_pen, formation_pen) {
 
 grouped <- data %>%
   group_by(gameId, playId, nflId) %>%
+  mutate(FI = a/s) %>%
+  filter(is.numeric(FI) & !(FI == Inf)) %>% #takes out any rows that will mess with avg and max FI calculations
+  filter(FI <= mean(FI) + sd(FI)*2 & FI >= mean(FI) - sd(FI)*2) %>%
   mutate(
     penalty_values = list(total_penalties(penaltyNames, tackle_pen, formation_pen)),
     tackle_pen = penalty_values[[1]][1], 
     formation_pen = penalty_values[[1]][2],
-    avg_fatigueIndex = sum(mean(a)/mean(s))) %>%
-  select(gameId, playId, nflId, displayName, frameId, load, max_acc, penalty_values, tackle_pen, formation_pen, avg_fatigueIndex)
+    avg_fatigueIndex = sum(mean(a)/mean(s)),
+    max_fatigueIndex = max(FI)) %>%
+  select(gameId, playId, nflId, displayName, frameId, load, max_acc, penalty_values, tackle_pen, formation_pen, avg_fatigueIndex, max_fatigueIndex, FI)
+
+summary(grouped$FI)
+summary(grouped$avg_fatigueIndex)
+summary(grouped$max_fatigueIndex)
+head(grouped)
+
+sd(grouped$FI)
 ```
 
-Some values of average fatigue index are Infinite because the player's logged speed is NaN. Let's impute 0 for those values.
+Some values of average/max fatigue index are Infinite because the player's logged speed is 0. Let's impute 0 for those values.
 ```{r}
 grouped$avg_fatigueIndex[is.infinite(grouped$avg_fatigueIndex)] <- 0
+grouped$max_fatigueIndex[is.infinite(grouped$max_fatigueIndex)] <- 0
+
 ```
 
 
@@ -403,7 +423,7 @@ grouped %>%
 We need to add cumulative load and fatigueIndex to this dataset, making it on a per-play level.
 ```{r per play data}
 test <- grouped %>%
-  select(gameId, playId, nflId, load, displayName, max_acc, tackle_pen, formation_pen, avg_fatigueIndex) %>%
+  select(gameId, playId, nflId, load, displayName, max_acc, tackle_pen, formation_pen, max_fatigueIndex,  avg_fatigueIndex) %>%
   distinct() %>%
   arrange(gameId, nflId, playId)
 
@@ -457,7 +477,7 @@ By selecting players with over 100 instances in the dataset, we have cut our dat
 
 Select Columns to Cluster.
 ```{r select cols}
-clustering_columns <- c("max_acc", "avg_fatigueIndex", "cum_load", "height", "weight", "age", "load")
+clustering_columns <- c("max_acc", "avg_fatigueIndex", "max_fatigueIndex", "cum_load", "height", "weight", "age", "load")
 ```
 
 
@@ -465,20 +485,22 @@ Our dataframe for clustering with include one row per player in our dataset and 
 ```{r make df}
 players <- unique(players_top$displayName)
 
-res <- as.data.frame(matrix(NA, nrow = length(players), ncol = 10))
+res <- as.data.frame(matrix(NA, nrow = length(players), ncol = 11))
 
 for(i in 1:length(players)){
   temp <- test[which(test$displayName == players[i]), ]
   
-  res[i, 1:7] <- colMeans(temp[, clustering_columns], na.rm = TRUE) #average of all columns above
-  res[i, 8] <- max(temp$max_acc, na.rm = TRUE) # max of max acceleration
-  res[i, 9] <- max(temp$cum_load, na.rm = TRUE) # max of cumulative load
-  res[i, 10] <- max(temp$avg_fatigueIndex, na.rm = TRUE) # max of average fatigue index
+  res[i, 1:8] <- colMeans(temp[, clustering_columns], na.rm = TRUE) #average of all columns above
+  res[i, 9] <- max(temp$max_acc, na.rm = TRUE) # max of max acceleration
+  res[i, 10] <- max(temp$cum_load, na.rm = TRUE) # max of cumulative load
+  res[i, 11] <- max(temp$avg_fatigueIndex, na.rm = TRUE) # max of average fatigue index
+  res[i,12] <- max(temp$max_fatigueIndex, na.rm = TRUE) #max of max fatigue index
 }
 
-names(res) <- c("avg_max_acc", "avg_fatigueIndex", "avg_cum_load", "height", "weight", "age", "avg_load", "max_acc_max", "max_cum_load_in_game", "max_avg_fatigueIndex")
+names(res) <- c("avg_max_acc", "avg_fatigueIndex", "max_fatigueIndex","avg_cum_load", "height", "weight", "age", "avg_load", "max_acc_max", "max_cum_load_in_game", "max_avg_fatigueIndex", "max_max_fatigueIndex")
 
 rownames(res) <- players
+summary(res)
 ```
 
 Remove NA values (before scaling).
@@ -518,7 +540,7 @@ library(factoextra)
 fviz_gap_stat(gapData)
 ```
 
-Here, we see that the optimal number of clusters is only 2, but we will continue with three clusters to further see disparity between them.
+Here, we see that the optimal number of clusters is three so we will continue with three clusters to further see disparity between them.
 
 Let's now run k-means clustering on the data.
 ```{r k means}
@@ -635,3 +657,27 @@ From this clustering analysis, we see some patterns in terms of penalties.
  - Cluster 1 has the highest values for formation penalties. These individuals have low weight but are in the upper 50% for age and height, as well as acceleration. 
  
 In terms of fatigue, we see average fatigue index being inversely proportional to weight and height. We see a greater acceleration for players with lower height and weight - these players are able to gain speed quicker than other players, but may also get fatigued quicker.
+
+
+##### Part 2
+Now let's see the influence of these similar "fatigue" and "demographic" variables on positive defensive performance, rather than negative penalties.
+
+
+The positive values we will look at:
+ - forcedFumbleAsDefense: forced a fumble by the opposing team
+ - halfSackYardsAsDefense: yards conceded by the offense because of a half-sack
+ - passDefensed: a passing play was stopped by the player
+ - quarterbackHit: player recorded a QB hit
+ - sackYardsAsDefense: yards conceded by the offense because of a sack by the player
+ - safetyAsDefense: player forced a safety on this play
+ - soloTackle: player recorded a solo tackle on this play
+ - tackleAssist: player was awarded an assisted tackle
+ - tackleForALoss: player recorded a tackle behind the line of scrimmage
+ - tackleForALossYardage: yards conceded by the offense because of a tackle
+ 
+ 
+```{r}
+positive_defense <- data %>% group_by(nflId) %>%
+  select(gameId, playId, nflId, forcedFumbleAsDefense, passDefensed, quarterbackHit, soloTackle, tackleAssist, tackleForALoss) %>% summarise(across(-c(gameId, playId, nflId), sum, na.rm = TRUE))
+```
+ 
