@@ -77,6 +77,12 @@ library(lubridate)
 library(tidyr)
 library(gridExtra)
 library(dendextend)
+#library(mice)
+library(cluster)
+#library(factoextra)
+library(ggrepel)
+
+
 ```
 
 #### Data
@@ -96,7 +102,7 @@ def_line_players <- player_data[player_data$position == 'DE' | player_data$posit
                           player_data$position == 'NT',]
 
 def_line <- play %>%
-  left_join(def_line_players[, c("nflId", "position")], by = "nflId")
+  right_join(def_line_players[, c("nflId", "position")], by = "nflId")
 
 def_line <- def_line %>%
   select(-c('hadRushAttempt', 'rushingYards', 'hadDropback', 'passingYards', 'sackYardsAsOffense',
@@ -132,15 +138,22 @@ Variables for defensive linemen:
  
 ```{r}
 summary(def_line)
+unique(def_line$gameId)
 ```
 
 Tracking Data
 ```{r load data}
-week1 <- read.csv('tracking_week_1.csv')
-week2 <- read.csv('tracking_week_2.csv')
-week3 <- read.csv('tracking_week_3.csv')
-weeks <- rbind(week1, week2, week3)
+# week1 <- read.csv('tracking_week_1.csv')
+# week2 <- read.csv('tracking_week_2.csv')
+# week3 <- read.csv('tracking_week_3.csv')
+# weeks <- rbind(week1, week2, week3)
+
+weeks <- data.frame(read.csv("weeksAll.csv"))
+dim(weeks)
 #save(weeks, file = "weeks123.RData")
+weeks$time <- as.POSIXct(weeks$time)
+unique(weeks$gameId)
+summary(weeks)
 ```
 
 The following variables from the tracking data can be used to calculate fatigue:
@@ -149,13 +162,14 @@ The following variables from the tracking data can be used to calculate fatigue:
 Join Data
 ```{r join}
 data <- inner_join(def_line, weeks, by = c("gameId", "playId", "nflId"))
-#save(data, file = "joinedData.RData")
+saveRDS(data, file = "joinedData.RData")
 ```
 
 ```{r}
 # load("joinedData.RData")
 colnames(data)
 head(data)
+summary(data)
 ```
 
 Two variables of importance are a player's load and fatigue index, which is equal to acceleration/speed. Let's visualize these for one player in one play. We want to look at movement only during/after the ball is snapped. We will filter the frameId to be within a small range of the snap and initial acceleration.
@@ -169,7 +183,10 @@ ran_play <- data %>%
   filter(!is.na(position)) %>%
   filter(frameId <= 155) %>%
   mutate(fatigueIndex = a/s)
-ggplot(ran_play, aes(x=frameId, y = fatigueIndex, color = position)) + geom_point() + geom_smooth()
+g <- ggplot(ran_play, aes(x=frameId, y = fatigueIndex, color = position)) + geom_point() + geom_smooth()
+ggsave(plot= g, filename= "g.png")
+
+
 ```
 
 Acceleration Per Play
@@ -180,7 +197,9 @@ ran_play2 <- data %>%
   filter(frameType != "BEFORE_SNAP") %>%
   filter(!is.na(position)) %>%
   filter(frameId <= 160)
-ggplot(ran_play2, aes(x=frameId, y = a, color = position)) + geom_point() + geom_smooth()
+g1 <- ggplot(ran_play2, aes(x=frameId, y = a, color = position)) + geom_point() + geom_smooth()
+ggsave(plot= g1, filename= "g1.png")
+
 ```
 
 #### Derived Variables
@@ -217,6 +236,8 @@ head(per_play)
 Load Per Player
 ```{r load per player plot}
 game <- data[data$gameId == 2022090800,]
+head(game)
+dim(game)
 
 # select 10 defensive linemen at random
 set.seed(456)
@@ -231,6 +252,8 @@ for (id in ran_nflIds) {
     theme_minimal()
 
   print(load_plot)
+  ggsave(plot= load_plot, filename= "load_plot.png")
+
 }
 ```
 
@@ -252,6 +275,7 @@ for (id in ran_nflIds) {
     theme_minimal()
 
   print(c_load_plot)
+  ggsave(plot = c_load_plot, filename = "c_load_plot.png")
 }
 ```
 
@@ -265,10 +289,11 @@ for (id in ran_nflIds) {
   load_plot <- ggplot(player_plot, aes(x = playId, y = maxFI)) +
     geom_point() + 
     geom_smooth(method = "loess", color = "blue") + 
-    labs(x = "Play ID", y = "Max FI", title = paste0("Player Fatigue Index in Game - NFL ID: ", id)) +
+    labs(x = "Play ID", y = "Max FI Per Play", title = paste0("Player Fatigue Resistance Index in Game - NFL ID: ", id)) +
     theme_minimal()
 
   print(load_plot)
+  ggsave(plot = load_plot, "load_plot.png")
 }
 ```
 There is some variation across players regarding their change in max fatigue index. Whilst some do go down as the game goes on, there are others that stay level or even increase towards the end of the game.
@@ -316,6 +341,9 @@ plot_weight <- ggplot(demographic, aes(x = weight, y = max_acc)) +
   geom_point() +
   labs(title = "Weight vs Acceleration", x = "Weight", y = "Avg Acceleration") +
   theme_minimal() +geom_smooth()
+ggsave(plot= plot_age, filename = "plot_age.png")
+ggsave(plot=plot_height, filename = "plot_height.png")
+ggsave(plot=plot_weight, filename = "plot_weight.png")
 
 grid.arrange(plot_age, plot_height, plot_weight, nrow = 1)
 
@@ -350,6 +378,7 @@ stacked_bar <- ggplot(plot_data, aes(x = as.factor(quarter), y = count, fill = p
   theme_minimal()
 
 stacked_bar
+ggsave(plot=stacked_bar, filename = "stacked_bar.png")
 
 # plot_data <- plot_data %>% na.omit()
 # plot_data <- plot_data %>% pivot_wider(names_from = penaltyType, values_from = count, values_fill = list(count = 0))
@@ -398,19 +427,24 @@ grouped <- data %>%
     max_fatigueIndex = max(FI)) %>%
   select(gameId, playId, nflId, displayName, frameId, load, max_acc, penalty_values, tackle_pen, formation_pen, avg_fatigueIndex, max_fatigueIndex, FI)
 
-summary(grouped$FI)
-summary(grouped$avg_fatigueIndex)
-summary(grouped$max_fatigueIndex)
-head(grouped)
+changeFI <-  grouped  %>% group_by(nflId, gameId) %>% arrange(playId) %>% summarize(change_FI = first(max_fatigueIndex) - last(max_fatigueIndex))
 
-sd(grouped$FI)
+grouped <- inner_join(grouped, changeFI, by = c("nflId", "gameId"))
+# summary(grouped$FI)
+# summary(grouped$avg_fatigueIndex)
+# summary(grouped$max_fatigueIndex)
+# head(grouped)
+# 
+# sd(grouped$FI)
+# grouped$penalty_values
+  
 ```
 
 Some values of average/max fatigue index are Infinite because the player's logged speed is 0. Let's impute 0 for those values.
 ```{r}
 grouped$avg_fatigueIndex[is.infinite(grouped$avg_fatigueIndex)] <- 0
-grouped$max_fatigueIndex[is.infinite(grouped$max_fatigueIndex)] <- 0
-
+grouped$max_fatigueIndex[is.infinite(grouped$change_FI)] <- 0
+saveRDS(grouped, "grouped.RData")
 ```
 
 
@@ -423,7 +457,7 @@ grouped %>%
 We need to add cumulative load and fatigueIndex to this dataset, making it on a per-play level.
 ```{r per play data}
 test <- grouped %>%
-  select(gameId, playId, nflId, load, displayName, max_acc, tackle_pen, formation_pen, max_fatigueIndex,  avg_fatigueIndex) %>%
+  select(gameId, playId, nflId, load, displayName, max_acc, tackle_pen, formation_pen, max_fatigueIndex,  avg_fatigueIndex, change_FI) %>%
   distinct() %>%
   arrange(gameId, nflId, playId)
 
@@ -432,6 +466,7 @@ test <- test %>%
   mutate(cum_load = cumsum(load))
 
 head(test)
+#summary(grouped)
 ```
 
 We also need to add player height, weight, and age.
@@ -462,6 +497,9 @@ convert_to_age <- function(birthdate) {
   return(floor(age))
 }
 test$age <- convert_to_age(test$birthDate)
+
+saveRDS(test, "test.RData")
+
 ```
 
 We want to analyze only players that occur many times in the dataset. We will eliminate players that only have a few total entries in the dataset, as these are not the starting players.
@@ -477,7 +515,7 @@ By selecting players with over 100 instances in the dataset, we have cut our dat
 
 Select Columns to Cluster.
 ```{r select cols}
-clustering_columns <- c("max_acc", "avg_fatigueIndex", "max_fatigueIndex", "cum_load", "height", "weight", "age", "load")
+clustering_columns <- c("max_acc", "change_FI", "cum_load", "height", "weight", "age")
 ```
 
 
@@ -485,19 +523,16 @@ Our dataframe for clustering with include one row per player in our dataset and 
 ```{r make df}
 players <- unique(players_top$displayName)
 
-res <- as.data.frame(matrix(NA, nrow = length(players), ncol = 11))
+res <- as.data.frame(matrix(NA, nrow = length(players), ncol = 6))
 
 for(i in 1:length(players)){
   temp <- test[which(test$displayName == players[i]), ]
   
-  res[i, 1:8] <- colMeans(temp[, clustering_columns], na.rm = TRUE) #average of all columns above
-  res[i, 9] <- max(temp$max_acc, na.rm = TRUE) # max of max acceleration
-  res[i, 10] <- max(temp$cum_load, na.rm = TRUE) # max of cumulative load
-  res[i, 11] <- max(temp$avg_fatigueIndex, na.rm = TRUE) # max of average fatigue index
-  res[i,12] <- max(temp$max_fatigueIndex, na.rm = TRUE) #max of max fatigue index
+  res[i, 1:6] <- colMeans(temp[, clustering_columns], na.rm = TRUE) #average of all columns above
+ 
 }
 
-names(res) <- c("avg_max_acc", "avg_fatigueIndex", "max_fatigueIndex","avg_cum_load", "height", "weight", "age", "avg_load", "max_acc_max", "max_cum_load_in_game", "max_avg_fatigueIndex", "max_max_fatigueIndex")
+names(res) <- c("avg_max_acc", "avg_change_fatigueIndex","avg_cum_load", "height", "weight", "age")
 
 rownames(res) <- players
 summary(res)
@@ -509,35 +544,56 @@ All of our NA values are present in the 'age' column of our dataset. We will do 
 sum(is.na(res))
 sum(is.na(res$age))
 
-library(mice)
-imputed_data <- mice(res, m = 5, method = 'pmm', maxit = 50, seed = 500)
-impute_data <- complete(imputed_data, action = 1)
+# imputed_data <- mice(res, m = 5, method = 'pmm', maxit = 50, seed = 500)
+# impute_data <- complete(imputed_data, action = 1)
 
+impute_mean <- function(x) {
+  x[is.na(x)] <- mean(x, na.rm = TRUE) 
+return(x) } # Apply the function to the dataframe 
+impute_data <- data.frame(lapply(res, impute_mean))
 sum(is.na(impute_data))
 ```
 
 Scale clustering data.
 ```{r scale}
 # avg_fatigueIndex is already in [0,1], so it does not need to be scaled.
-unscaled_col <- impute_data$avg_fatigueIndex
+#unscaled_col <- impute_data$avg_change_fatigueIndex
 
-all_data <- impute_data[, !names(impute_data) %in% c("avg_fatigueIndex")]
+#all_data <- impute_data[, !names(impute_data) %in% c("avg_change_fatigueIndex")]
 
 # Before scaling data, log transform.
-all_data <- log(all_data + 1)
+all_data <- impute_data
+all_data$avg_change_fatigueIndex <- log(abs(impute_data$avg_change_fatigueIndex) +1)* sign(impute_data$avg_change_fatigueIndex) #log separately because negative values
 
-sdata <- scale(all_data)
+ all_data[,-2] <- log(impute_data[,-2] + 1) 
+ 
+ 
+ summary(impute_data)
+ 
+ 
+# 
+# 
+ sdata <- scale(all_data)
 
-sdata <- cbind(sdata, avg_fatigueIndex = unscaled_col)
+#sdata <- cbind(sdata, avg_change_fatigueIndex = unscaled_col)
+saveRDS(sdata, "scaled.RData")
+
+
+#sdata <- scale(impute_data)
 ```
 
 Find the optimal number of clusters for analysis.
 ```{r optimal clusters}
-library(cluster)
 gapData <- clusGap(sdata, FUNcluster = kmeans, K.max = 15)
 
-library(factoextra)
-fviz_gap_stat(gapData)
+
+gap_data <- data.frame( k = 1:15, gap = gapData$Tab[,"gap"], SE.sim = gapData$Tab[,"SE.sim"] )
+
+plot_gap <- ggplot(gap_data, aes(x = k, y = gap)) + geom_line() + geom_point() + geom_errorbar(aes(ymin = gap - SE.sim, ymax = gap + SE.sim), width = 0.2) + labs(title = "Gap Statistic", x = "Number of Clusters", y = "Gap Value") + theme_minimal()
+
+
+#fviz_gap_stat(gapData)- doesnt like package in ssh
+saveRDS(plot_gap, "gapData.RData")
 ```
 
 Here, we see that the optimal number of clusters is three so we will continue with three clusters to further see disparity between them.
@@ -547,20 +603,25 @@ Let's now run k-means clustering on the data.
 set.seed(12345) 
 
 fit <- kmeans(x = sdata,
-                centers = 3, 
+                centers = 5, 
                 nstart = 25, 
                 iter.max = 100)
 clusters <- fit$cluster
 centers <- fit$centers
 summary(as.factor(clusters))
+
+saveRDS(fit, "clusterModel.RData")
+
+
 ```
 
 Let's move forward with three clusters.
 ```{r centers}
-cluster <- c(1:3)
+cluster <- c(1:5)
 center_df <- data.frame(cluster, centers)
 
-center_reshape <- gather(center_df, features, values, avg_max_acc:avg_fatigueIndex)
+center_reshape <- gather(center_df, features, values, -cluster)
+saveRDS(center_reshape, "heatmap1.RData")
 ```
 
 
@@ -583,6 +644,7 @@ heatmap <- ggplot(data = center_reshape,
   coord_flip() 
 
 heatmap
+ggsave(plot=heatmap, filename = "heatmap.png")
 ```
 
 Now, we can add total penalties to the clusters.
@@ -591,44 +653,56 @@ First, let's assign cluster number to player name.
 ```{r player clusters}
 player_clusts <- data.frame(player_name = players, cluster = clusters)
 rownames(player_clusts) <- NULL
+saveRDS(player_clusts, "player_clusts.RData")
+
 ```
 
 ```{r add penalties}
-sum_pen <- as.data.frame(matrix(NA, nrow = nrow(player_clusts), ncol = 2))
+# sum_pen <- as.data.frame(matrix(NA, nrow = nrow(player_clusts), ncol = 2))
+# 
+# for(i in 1:nrow(player_clusts)){
+#   temp <- test[which(test$displayName == player_clusts$player_name[i]), ]
+#   
+#   sum_pen[i, 1] <- sum(temp$tackle_pen, na.rm = TRUE)
+#   sum_pen[i, 2] <- sum(temp$formation_pen, na.rm = TRUE)
+# }
+# 
+# colnames(sum_pen) <- c("total_tackle_pen", "total_formation_pen")
+# sum_pen <- cbind(player_clusts, sum_pen)
+names_penalties <- test %>% group_by(displayName) %>% summarise( avg_formation = mean(formation_pen), avg_tackle = mean(tackle_pen), avg_pen = mean(tackle_pen+formation_pen)) %>% inner_join(player_clusts, by = c("displayName" = "player_name"))
 
-for(i in 1:nrow(player_clusts)){
-  temp <- test[which(test$displayName == player_clusts$player_name[i]), ]
-  
-  sum_pen[i, 1] <- sum(temp$tackle_pen, na.rm = TRUE)
-  sum_pen[i, 2] <- sum(temp$formation_pen, na.rm = TRUE)
-}
 
-colnames(sum_pen) <- c("total_tackle_pen", "total_formation_pen")
-sum_pen <- cbind(player_clusts, sum_pen)
+penalties_perGame <- test %>% group_by(displayName, gameId) %>% summarise( avg_formation = mean(formation_pen), avg_tackle = mean(tackle_pen)) %>% inner_join(player_clusts, by = c("displayName" = "player_name")) %>% ungroup() %>% select(-gameId, -displayName) %>% group_by(cluster) %>% summarise(avg_formation_perGame = mean(avg_formation), avg_tackle_perGame = mean(avg_tackle)) %>% gather( key="features", value="values", -cluster) #pivot longer 
+penalties_perGame$values = scale(penalties_perGame$values )
 ```
 
 Now that we have a sum of penalties for each player, we can count this total for each cluster and add it to our heatmap.
 ```{r calc totals}
-totals <- as.data.frame(matrix(NA, nrow = 3, ncol = 4))
-
-for(i in 1:3){
-  temp <- sum_pen[which(sum_pen$cluster == i), ]
-  
-  totals[i, 1] <- sum(temp$total_tackle_pen, na.rm = TRUE)
-  totals[i, 2] <- sum(temp$total_formation_pen, na.rm = TRUE)
-  totals[i, 3] <- sum(temp$total_tackle_pen, na.rm = TRUE)/nrow(temp)
-  totals[i, 4] <- sum(temp$total_formation_pen, na.rm = TRUE)/nrow(temp)
-}
-
-colnames(totals) <- c("total_tackle_pen", "total_formation_pen", "tackle_pen_percent",
-                      "formation_pen_percent")
+# totals <- as.data.frame(matrix(NA, nrow = 3, ncol = 4))
+# 
+# for(i in 1:3){
+#   temp <- sum_pen[which(sum_pen$cluster == i), ]
+#   
+#   totals[i, 1] <- sum(temp$total_tackle_pen, na.rm = TRUE)
+#   totals[i, 2] <- sum(temp$total_formation_pen, na.rm = TRUE)
+#   totals[i, 3] <- sum(temp$total_tackle_pen, na.rm = TRUE)/nrow(temp)
+#   totals[i, 4] <- sum(temp$total_formation_pen, na.rm = TRUE)/nrow(temp)
+# }
+# 
+# colnames(totals) <- c("total_tackle_pen", "total_formation_pen", "tackle_pen_percent",
+#                       "formation_pen_percent")
 ```
 
 Let's add these penalty calculations back to our cluster dataframe and create a new heatmap.
 ```{r new scaling}
-totals_scaled <- scale(totals)
-new_center_df <- cbind(center_df, totals_scaled)
-new_center_reshape <- gather(new_center_df, features, values, avg_max_acc:formation_pen_percent)
+# totals_scaled <- scale(totals)
+# new_center_df <- cbind(center_df, totals_scaled)
+# 
+# new_center_reshape <- gather(new_center_df, features, values, avg_max_acc:formation_pen_percent)
+
+new_center_reshape <- gather(center_df, features, values,-cluster) %>% rbind(penalties_perGame)
+saveRDS(new_center_reshape, "heatmap2.RData")
+
 ```
 
 ```{r new heatmap}
@@ -649,6 +723,7 @@ heatmap2 <- ggplot(data = new_center_reshape,
   coord_flip() 
 
 heatmap2
+ggsave(plot=heatmap2, filename = "heatmap2.png")
 ```
 From this clustering analysis, we see some patterns in terms of penalties.
 
@@ -669,7 +744,7 @@ The positive values we will look at:
  - passDefensed: a passing play was stopped by the player
  - quarterbackHit: player recorded a QB hit
  - sackYardsAsDefense: yards conceded by the offense because of a sack by the player
- - safetyAsDefense: player forced a safety on this play
+ - safetyAsDefense: player forced a safety on this play (NOT INCLUDING AS SO RARE)
  - soloTackle: player recorded a solo tackle on this play
  - tackleAssist: player was awarded an assisted tackle
  - tackleForALoss: player recorded a tackle behind the line of scrimmage
@@ -678,6 +753,140 @@ The positive values we will look at:
  
 ```{r}
 positive_defense <- data %>% group_by(nflId) %>%
-  select(gameId, playId, nflId, forcedFumbleAsDefense, passDefensed, quarterbackHit, soloTackle, tackleAssist, tackleForALoss) %>% summarise(across(-c(gameId, playId, nflId), sum, na.rm = TRUE))
+  select(gameId, playId, nflId, forcedFumbleAsDefense, passDefensed, quarterbackHit, soloTackle, tackleAssist, tackleForALoss) %>% group_by(gameId, playId, nflId) %>% summarise(across(everything(), ~ as.integer(any(. == 1))))
+
+counts_4weeks <- positive_defense %>% ungroup()%>% select(-c(gameId, playId, nflId)) %>% summarise_all(sum)
+
+
+#Number of each over the 4 weeks we have
+counts_4weeks
+
+positive_defense_yds <- data %>% group_by(nflId) %>%
+  select(gameId, playId, nflId, halfSackYardsAsDefense, sackYardsAsDefense, tackleForALossYardage) %>% group_by(gameId, playId, nflId) %>% summarise(across(everything(), ~ as.integer(any(. == 1))))
+
+counts_yds_4weeks <- positive_defense_yds %>% ungroup()%>% select(-c(gameId, playId, nflId)) %>% summarise_all(mean)
+counts_yds_4weeks
+
+
+#Shows there is very little recorded in terms of yardage lost because of d-line. We are better off using the binary values
+counts_yds_4weeks
+
+
+positive_defense <- positive_defense %>% ungroup() %>% inner_join(player_data %>% select(nflId, displayName))
+summary_def <- positive_defense %>% select(-playId) %>% group_by(displayName) %>% summarise_all(mean) #avg per player per game num of each def
+
+new_col_names <- names(summary_def)
+new_col_names[4:9] <- paste0(new_col_names[4:9], "_AvgPerGame") 
+summary_def <- setNames(summary_def, new_col_names)
+
+summary_def <- summary_def %>% select(-gameId, -nflId)
+scaled_count <- data.frame(cbind(displayName = players_top$displayName,  scale(players_top$count))) %>% inner_join(player_clusts, by = c("displayName" =  "player_name")) %>% rename(play_count = V2) %>% mutate(play_count =as.numeric(play_count))
+
+
+
+play_counts <- inner_join(players_top, player_clusts, by = c("displayName" =  "player_name")) %>% rename(plays_count = count)
+
+#player_clust < summary_def as it is filtered to just top players
+player_clust_def <- right_join(summary_def, play_counts, by = c("displayName")) %>% na.omit()
+
+
+clustered_def <- player_clust_def %>% group_by(cluster) %>% select(-displayName) %>% summarise_all(mean) #summarise avg of players in cluster
+
+scaled <- data.frame(scale(clustered_def %>% select(-cluster))) %>% cbind(cluster = c(1,2,3,4,5)) #scaling
+
+new_clustered_def <- inner_join(scaled, center_df, by = "cluster") #joining with clustered "fatigue stats"
+
+new_clustered_def <- new_clustered_def %>% gather( key="features", value="values", -cluster) #pivot longer 
+saveRDS(new_clustered_def, "heatmap3.RData")
+
 ```
- 
+
+```{r}
+heatmap3 <- ggplot(data = new_clustered_def, 
+                   aes(x = features, y = cluster, fill = values)) + 
+  scale_y_continuous(breaks = seq(1, 8, by = 1)) + 
+  geom_tile() + 
+  coord_equal() + 
+  theme_bw() + 
+  scale_fill_gradient2(low = "blue", 
+                       mid = "white", 
+                       high = "red",
+                       midpoint =0, 
+                       space = "Lab", 
+                       na.value ="grey", 
+                       guide = "colourbar", 
+                       aesthetics = "fill") + 
+  coord_flip() 
+
+heatmap3
+ggsave(plot=heatmap3, filename = "heatmap3.png")
+```
+
+
+Looking at both our heat maps, we need to decide which "fatigue" features to keep. Those will be:
+- age
+- avg_cum_load
+- height
+- max_fatigueIndex (avg per player, per game of max FI)
+- weight
+- *_AvgPerGame
+- avg_max_acc (avg per player, per game of max acc)
+- plays_count (number of plays)
+
+
+
+### Clusters by Player
+
+
+```{r}
+plot1 <- res %>% select(avg_change_fatigueIndex, avg_cum_load) 
+plot1$player_name <- rownames(plot1)
+plot1 <- inner_join(plot1, player_clusts)
+plot1$cluster <- as.factor(plot1$cluster)
+
+saveRDS(plot1, "playerplot1.RData")
+
+
+g_1 <- ggplot(plot1, # Set dataset
+              aes(x = avg_change_fatigueIndex,  # Set x-axis as number of fastballs
+                  y = avg_cum_load, color = cluster)) + # Set y-axis as fastball speed
+  geom_point() + # Add geom point for scatter plot
+  # Label players with fastball speed above 95
+  geom_text_repel(data = plot1,
+                  aes(label = paste(player_name))) +
+   theme(panel.grid.major = element_blank(), # Remove grid
+        panel.grid.minor = element_blank(), # Remove grid
+        panel.border = element_blank(), # Remove grid
+        panel.background = element_blank()) + # Remove grid
+  labs(x = "Avg Change Fatigue Resistance Index", y = "Avg Cumulative Load",
+       title = "Defensive Line by Cluster- Fatigue Resistance",
+       subtitle = "NFL 2022")
+g_1
+ggsave(plot= g_1, filename= "g_1.png")
+```
+```{r}
+plot2 <- inner_join(summary_def, names_penalties) %>% mutate(cluster = as.factor(cluster))
+
+saveRDS(plot2, "playerplot2.RData")
+g_2 <- ggplot(plot2, # Set dataset
+              aes(x = soloTackle_AvgPerGame,  # Set x-axis as number of fastballs
+                  y = avg_pen, color = cluster)) + # Set y-axis as fastball speed
+  geom_point() + # Add geom point for scatter plot
+  # Label players with fastball speed above 95
+  geom_text_repel(data = plot2,
+                  aes(label = paste(displayName))) +
+   theme(panel.grid.major = element_blank(), # Remove grid
+        panel.grid.minor = element_blank(), # Remove grid
+        panel.border = element_blank(), # Remove grid
+        panel.background = element_blank()) + # Remove grid
+  labs(x = "Avg Solo Tackles Per Game", y = "Avg Total Penalties per Game",
+       title = "Defensive Line by Cluster- Tackles vs Penalties",
+       subtitle = "NFL 2022")
+g_2
+ggsave(plot= g_2, filename= "g_2.png")
+```
+
+
+
+
+
