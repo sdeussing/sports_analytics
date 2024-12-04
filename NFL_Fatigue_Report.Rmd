@@ -24,8 +24,9 @@ As an extension to this, we will also derive a "Fatigue Index" based on the rese
 ## Problem framing
 We will be creating two derived variables:
 
-- Load by player by play
-- Fatigue index by player by play
+- (Cumulative) load by player by play
+- Fatigue resistance index by player by play
+  - change in fatigue resistance index over a game
 
 Perform a time-series analysis over the length of a game/period to see trend and seasonality of fatigue and the change in fatigue at specific events, e.g. "mistakes".
 
@@ -41,6 +42,8 @@ Use player demographic data, time, tracking and load data to predict probability
 Use player demographic data, time, tracking and load data to predict positive defensive outcomes such as sacks, pressure and fumbles.
 
 Identify fatigue-resistant players and cluster to see if they have similar demographic characteristics.
+
+Use clustering analysis to identify which free agents to pick up and which players to develop endurance/fatigue resistance.
 
 ## Data overview
 The dataset is a part of the NFL Big Data Bowl 2025, and it is taken from:
@@ -412,15 +415,16 @@ ggsave(plot=stacked_bar, filename = "stacked_bar.png")
 This doesn't show exactly what we thought. There is an increase in both types of penalties from the first to the second quarter, and an increase in formation penalties from the third to fourth quarter. We would expect some type of reset after half time, so we will also look at fatigue by quarter. This is just a plot for week 1 data so it's not totally representative of the season or the "NFL" in general.
 
 #### Clustering Analysis
-##### Part 1
 
 We are going to cluster players based on their:
-  - cumulative load
-  - fatigueIndex
-  - height
-  - weight
   - age
-  - max. acceleration
+  - avg_cum_load
+  - height
+  - max_fatigueIndex (avg per player, per game of max FI)
+  - weight
+  - *_AvgPerGame (penalties and defensive plays)
+  - avg_max_acc (avg per player, per game of max acc)
+  - plays_count (number of plays)
 
 ```{r grouping}
 # for each gameId, playId, nflId group: if any of the penalties match a value in tackle or formation penalties, set this value to 1
@@ -446,13 +450,7 @@ grouped <- data %>%
 changeFI <-  grouped  %>% group_by(nflId, gameId) %>% arrange(playId) %>% summarize(change_FI = first(max_fatigueIndex) - last(max_fatigueIndex))
 
 grouped <- inner_join(grouped, changeFI, by = c("nflId", "gameId"))
-# summary(grouped$FI)
-# summary(grouped$avg_fatigueIndex)
-# summary(grouped$max_fatigueIndex)
-# head(grouped)
-# 
-# sd(grouped$FI)
-# grouped$penalty_values
+
   
 ```
 
@@ -463,12 +461,6 @@ grouped$max_fatigueIndex[is.infinite(grouped$change_FI)] <- 0
 saveRDS(grouped, "grouped.RData")
 ```
 
-
-```{r, eval=FALSE}
-# check
-grouped %>%
-  filter(tackle_pen == 1 | formation_pen == 1)
-```
 
 We need to add cumulative load and fatigueIndex to this dataset, making it on a per-play level.
 ```{r per play data}
@@ -482,7 +474,6 @@ test <- test %>%
   mutate(cum_load = cumsum(load))
 
 head(test)
-#summary(grouped)
 ```
 
 We also need to add player height, weight, and age.
@@ -550,7 +541,7 @@ for(i in 1:length(players)){
  
 }
 
-names(res) <- c("avg_max_acc", "avg_change_fatigueIndex","avg_cum_load", "height", "weight", "age")
+names(res) <- c("avg_max_acc", "avg_change_fatigueResistanceIndex","avg_cum_load", "height", "weight", "age")
 
 rownames(res) <- players
 summary(res)
@@ -574,14 +565,9 @@ sum(is.na(impute_data))
 
 Scale clustering data.
 ```{r scale}
-# avg_fatigueIndex is already in [0,1], so it does not need to be scaled.
-#unscaled_col <- impute_data$avg_change_fatigueIndex
-
-#all_data <- impute_data[, !names(impute_data) %in% c("avg_change_fatigueIndex")]
-
 # Before scaling data, log transform.
 all_data <- impute_data
-all_data$avg_change_fatigueIndex <- log(abs(impute_data$avg_change_fatigueIndex) +1)* sign(impute_data$avg_change_fatigueIndex) #log separately because negative values
+all_data$avg_change_fatigueResistanceIndex <- log(abs(impute_data$avg_change_fatigueResistanceIndex) +1)* sign(impute_data$avg_change_fatigueResistanceIndex) #log separately because negative values
 
 all_data[,-2] <- log(impute_data[,-2] + 1) 
  
@@ -626,7 +612,7 @@ saveRDS(fit, "clusterModel.RData")
 
 ```
 
-Let's move forward with three clusters.
+Let's move forward with four clusters.
 ```{r centers}
 cluster <- c(1:4)
 center_df <- data.frame(cluster, centers)
@@ -636,7 +622,7 @@ saveRDS(center_reshape, "heatmap1.RData")
 ```
 
 
-Heatmap
+
 ```{r heatmap}
 heatmap <- ggplot(data = center_reshape, 
                    aes(x = features, y = cluster, fill = values)) + 
@@ -657,6 +643,7 @@ heatmap <- ggplot(data = center_reshape,
 heatmap
 ggsave(plot=heatmap, filename = "heatmap.png")
 ```
+##### Part 1
 
 Now, we can add total penalties to the clusters.
 
@@ -685,23 +672,6 @@ names_penalties <- test %>% group_by(displayName) %>% summarise( avg_formation =
 
 penalties_perGame <- test %>% group_by(displayName, gameId) %>% summarise( avg_formation = mean(formation_pen), avg_tackle = mean(tackle_pen)) %>% inner_join(player_clusts, by = c("displayName" = "player_name")) %>% ungroup() %>% select(-gameId, -displayName) %>% group_by(cluster) %>% summarise(avg_formation_perGame = mean(avg_formation), avg_tackle_perGame = mean(avg_tackle)) %>% gather( key="features", value="values", -cluster) #pivot longer 
 penalties_perGame$values = scale(penalties_perGame$values )
-```
-
-Now that we have a sum of penalties for each player, we can count this total for each cluster and add it to our heatmap.
-```{r calc totals}
-# totals <- as.data.frame(matrix(NA, nrow = 3, ncol = 4))
-# 
-# for(i in 1:3){
-#   temp <- sum_pen[which(sum_pen$cluster == i), ]
-#   
-#   totals[i, 1] <- sum(temp$total_tackle_pen, na.rm = TRUE)
-#   totals[i, 2] <- sum(temp$total_formation_pen, na.rm = TRUE)
-#   totals[i, 3] <- sum(temp$total_tackle_pen, na.rm = TRUE)/nrow(temp)
-#   totals[i, 4] <- sum(temp$total_formation_pen, na.rm = TRUE)/nrow(temp)
-# }
-# 
-# colnames(totals) <- c("total_tackle_pen", "total_formation_pen", "tackle_pen_percent",
-#                       "formation_pen_percent")
 ```
 
 Let's add these penalty calculations back to our cluster dataframe and create a new heatmap.
@@ -736,6 +706,9 @@ heatmap2 <- ggplot(data = new_center_reshape,
 heatmap2
 ggsave(plot=heatmap2, filename = "heatmap2.png")
 ```
+###### Heatmap Analysis with Penalties
+
+
 From this clustering analysis, we see some patterns in terms of penalties.
 
  - Cluster 3 has the highest amount/percentage of tackling penalties and the lowest percentage of formation penalties. These players have the lowest weight, age, and height, with mid-range values for load and acceleration.
@@ -831,36 +804,37 @@ heatmap3 <- ggplot(data = new_clustered_def,
 heatmap3
 ggsave(plot=heatmap3, filename = "heatmap3.png")
 ```
-Cluster Analysis
+###### Heatmap Analysis with Positive Defensive Plays
+
+We can see a split in the clusters with them tending towards either of the following groups.
 
 Group 1: Defensive Impact Plays
 These stats reflect high-impact plays that significantly disrupt the offense or stop their progress forcefully.
 
-forcedFumbleAsDefense
-
-quarterbackHit
-
-soloTackle
-
-tackleForALoss
+- forcedFumbleAsDefense
+- quarterbackHit
+- soloTackle
+- tackleForALoss
 
 
 Group 2: Supportive Defensive Plays
 These stats highlight plays where the defender provides crucial support, either by assisting or directly preventing a successful offensive move.
 
-passDefensed
+- passDefensed
+- tackleAssist
 
-tackleAssist
+Cluster 1: best at the supportive defensive plays, mid-range for demographics, struggle heavily with fatigue despite having low cumulative load and low acceleration, they cannot maintain it
 
-Looking at both our heat maps, we need to decide which "fatigue" features to keep. Those will be:
-- age
-- avg_cum_load
-- height
-- max_fatigueIndex (avg per player, per game of max FI)
-- weight
-- *_AvgPerGame
-- avg_max_acc (avg per player, per game of max acc)
-- plays_count (number of plays)
+
+Cluster 2: significantly best at defensive impact plays, lightest, good at resisting fatigue despite high plays, load and acceleration
+
+
+Cluster 3: only really good for tackle assistance so they are not making big real-time plays themselves, oldest and tallest, play the least and have relatively low load and acceleration but are good at maintaining it
+
+
+Cluster 4: ok for the supportive defensive plays, shortest, average for amount they play, their load and acceleration but good at maintaining and resisting fatigue
+
+Cluster 2 is significantly best when looking holistically at defensive metrics and resistance of fatigue. Cluster 1 and 4 are both more geared towards supportive plays, but if we want to consider both production and fatigue resistance, cluster 4 is holistically better.
 
 
 
@@ -868,7 +842,7 @@ Looking at both our heat maps, we need to decide which "fatigue" features to kee
 
 
 ```{r}
-plot1 <- res %>% select(avg_change_fatigueIndex, avg_cum_load) 
+plot1 <- res %>% select(avg_change_fatigueResistanceIndex, avg_cum_load) 
 plot1$player_name <- rownames(plot1)
 plot1 <- inner_join(plot1, player_clusts)
 plot1$cluster <- as.factor(plot1$cluster)
@@ -877,7 +851,7 @@ saveRDS(plot1, "playerplot1.RData")
 
 
 g_1 <- ggplot(plot1, # Set dataset
-              aes(x = avg_change_fatigueIndex,  # Set x-axis as number of fastballs
+              aes(x = avg_change_fatigueResistanceIndex,  # Set x-axis as number of fastballs
                   y = avg_cum_load, color = cluster)) + # Set y-axis as fastball speed
   geom_point() + # Add geom point for scatter plot
   # Label players with fastball speed above 95
@@ -914,7 +888,7 @@ g_2 <- ggplot(plot2, # Set dataset
 g_2
 ggsave(plot= g_2, filename= "g_2.png")
 ```
-### Free Agent Selection
+## Free Agent Selection
 ```{r curr free agents}
 page = read_html("https://www.spotrac.com/nfl/free-agents/_/year/2024/status/available/sort/contract_value")
 free_tbl <- data.frame(html_table(page)[[1]] )
@@ -927,7 +901,7 @@ free_tbl <- free_tbl %>% filter(displayName %in% unique(players_top$displayName)
 plot3 <- inner_join(plot1 %>% select(-cluster), plot2, by = c("player_name" = "displayName"))%>% filter(player_name %in% free_tbl$displayName) %>% mutate(composite = rowSums(select(., 4:12)))
  
 g_3 <- ggplot(plot3, # Set dataset
-              aes(x = avg_change_fatigueIndex,  # Set x-axis as number of fastballs
+              aes(x = avg_change_fatigueResistanceIndex,  # Set x-axis as number of fastballs
                   y = avg_cum_load, color = cluster, size = composite, alpha = 0.7)) + # Set y-axis as fastball speed
   geom_point() + # Add geom point for scatter plot
   geom_text_repel(data = plot3,
@@ -942,7 +916,7 @@ g_3 <- ggplot(plot3, # Set dataset
 g_3
 
 g_4 <- ggplot(plot3, # Set dataset
-              aes(x = avg_change_fatigueIndex,  # Set x-axis as number of fastballs
+              aes(x = avg_change_fatigueResistanceIndex,  # Set x-axis as number of fastballs
                   y = avg_cum_load, color = cluster, size = avg_pen, alpha = 0.7)) + # Set y-axis as fastball speed
   geom_point() + # Add geom point for scatter plot
   geom_text_repel(data = plot3,
@@ -956,7 +930,7 @@ g_4 <- ggplot(plot3, # Set dataset
        subtitle = "NFL 2022")+ guides(alpha = "none")
 g_4
 ```
-
+## Conclusion
 
 
 
