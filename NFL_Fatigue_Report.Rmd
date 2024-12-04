@@ -7,49 +7,14 @@ output:
   html_document: default
 ---
 
-## Motivation
-Our analysis will study fatigue in defensive linemen using their speed, acceleration, distance traveled, and orientation. We will be calculating a player load and analyze the defensive player's effectiveness. To do so, we will combine this movement data with play outcome data - if the player sacked the quarterback, had a solo tackle, etc.
+## Introduction
+Our analysis will study fatigue in defensive linemen using their speed, acceleration, distance traveled, and orientation. Our motivation for pursuing this problem is our interest in injury-related factors for athletes and our desire to find ways to lessen the likelihood of injury and burnout/fatigue in a game.
 
-The outcome of our analysis will be to predict likelihood of "mistakes" and positive plays, based on player fatigue and other game-time variables and to identify if specific players are more fatigue-resistant.
+We will be calculating a player load and analyze the defensive player's effectiveness. To do so, we will combine this movement data with play outcome data - if the player sacked the quarterback, had a solo tackle, etc. The outcome of our analysis will be to predict likelihood of "mistakes" and positive plays, based on player fatigue, other game-time variables, and demographic variables such as height, weight, and age. We will be using K-Mean Clustering methods to group similar defensive linemen based on these variables. Finally, we will advise teams/coaches of the most fatigue-resistant linemen that are currently free agents and provide recommendations to improve player fatigue and lessen the number of penalties.
 
-There has been published research on long-term fatigue and "burnout" in NFL players over the course of their careers, which focuses on long-term health and physiological effects. There has also been research on game day fatigue in European Football to determine limitations on performance based on fatigue, in order to create suitable, enhancing interventions (Alghannam). However, there is no player specific or NFL game day based fatigue analysis, which is what will set our project apart.
-
-
-## Research
-We wanted to find a measure of fatigue that was derived from tracking data. From an study on _Monitoring Fatigue During Intermittent Exercise With Accelerometer-Derived Metrics_ and Catapult's own description of Player Load, we found this idea of "Dynamic Load", that is a sum of triaxial acceleration across a set time period. We do not have acceleration in three plains but we do have an acceleration in the direction of play so we decided to derive a "Load per Play" value that will be acceleration summed per player per play.
-
-As an extension to this, we will also derive a "Fatigue Index" based on the research by Beato et al., that will be a value of acceleration/speed for each value in time, i.
-
-
-## Problem framing
-We will be creating two derived variables:
-
-- (Cumulative) load by player by play
-- Fatigue resistance index by player by play
-  - change in fatigue resistance index over a game
-
-Perform a time-series analysis over the length of a game/period to see trend and seasonality of fatigue and the change in fatigue at specific events, e.g. "mistakes".
-
-Define mistake as penalties that will be grouped based on type:
-- Formation
-  - Illegal Shift, Illegal Formation, Defensive Offside
-
-- Tackle
-  - Defensive Holding, Horse Collar Tackle, Low Block, Illegal Use of Hands, Roughing the Passer
-
-Use player demographic data, time, tracking and load data to predict probability of "mistake" at a given time.
-
-Use player demographic data, time, tracking and load data to predict positive defensive outcomes such as sacks, pressure and fumbles.
-
-Identify fatigue-resistant players and cluster to see if they have similar demographic characteristics.
-
-Use clustering analysis to identify which free agents to pick up and which players to develop endurance/fatigue resistance.
-
-## Data overview
+#### Data Overview
 The dataset is a part of the NFL Big Data Bowl 2025, and it is taken from:
-https://www.kaggle.com/competitions/nfl-big-data-bowl-2025/data 
-
-We are going to use four main parts of the dataset: player_play, players, plays, and the tracking data for each week.
+https://www.kaggle.com/competitions/nfl-big-data-bowl-2025/data. The data contains information from the 2022 NFL season. We are going to use four main parts of the dataset: player_play, players, plays, and the tracking data for each week.
 
 The player_play data contains information about the action of the play, including its outcome or any penalties. Each row corresponds to one player's individual actions for each play within a game.
 
@@ -57,19 +22,40 @@ The players data contains information about each player, including position, hei
 
 The plays data contains information about the quarter, time, and contents of each play.
 
-The tracking data has the x-coordinate, y-coordinate, direction, orientation, speed, and acceleration for each player involved in each play in a game. We will use this movement data to calculate player fatigue. This tracking data is available for all 9 weeks of the season.
+The tracking data has the x-coordinate, y-coordinate, direction, orientation, speed, and acceleration for each player involved in each play in a game. We will use this movement data to calculate player fatigue and load. This tracking data is available for all 9 weeks of the season and is captured on a frame-by-frame level.
 
-The datasets can be joined on: gameId, playId, and nflId.
+The datasets can be joined on: gameId, playId, and nflId, and we will filter to only defensive linemen for our analysis.
 
-## Contribution
-Imogen Meers & Sarah Deussing
+## Related Work & Research
 
-## Bibliography
-Alghannam, Abdullah F. “Metabolic limitations of performance and fatigue in football.” Asian journal of sports medicine vol. 3,2 (2012): 65-73. doi:10.5812/asjsm.34699
+There has been published research on long-term fatigue and "burnout" in NFL players over the course of their careers, which focuses on long-term health and physiological effects. There has also been research on game day fatigue in European Football to determine limitations on performance based on fatigue, in order to create suitable, enhancing interventions (Alghannam). However, there is no player specific or NFL game day based fatigue analysis, which is what will set our project apart.
 
-Beato, Marco et al. “Monitoring Fatigue During Intermittent Exercise With Accelerometer-Derived Metrics.” Frontiers in physiology vol. 10 780. 26 Jun. 2019, doi:10.3389/fphys.2019.00780
+We wanted to find a measure of fatigue that was derived from tracking data. From an study on _Monitoring Fatigue During Intermittent Exercise With Accelerometer-Derived Metrics_ and Catapult's own description of Player Load, we found this idea of "Dynamic Load", that is a sum of triaxial acceleration across a set time period. We do not have acceleration in three plains but we do have an acceleration in the direction of play so we decided to derive a "Load per Play" value that will be acceleration summed per player per play.
 
-Finster-Rowen, Alex. "What is Player Load?" Catapult Sports. Catapult Sports, n.d. Web.
+As an extension to this, we will also derive a "Fatigue Index" based on the research by Beato et al., that will be a value of acceleration/speed for each value in time, i. 
+
+
+## Methods
+We will be creating two derived variables:
+
+1.  (Cumulative) load by player by play
+  - Load is the summation of acceleration across a game, and cumulative load sums these values on a game level.
+2. Fatigue resistance index by player by play
+  - The fatigue index will be calculated by performing acceleration/speed, which is a measure of explosiveness. Our change in fatigue resistance index over a game will indicate if a player became more or less explosive, with these values indicating fatigue resistance and fatigue, respectively.
+  
+These values will then be summarized by player, excluding players that do not have a significant number of entries in the dataset (these players are either injured or bench players).
+
+We will then be visualizing the trend and seasonality of fatigue across the length of a game. This will allow us to find the averages of maximum acceleration, load, and fatigue values for a player across a season.
+
+Our goal is to identify a relationship between player fatigue and penalties/positive tackles. Penalties will be grouped based on type.
+1. Formation
+  - Illegal Shift, Illegal Formation, Defensive Offside
+2. Tackle
+  - Defensive Holding, Horse Collar Tackle, Low Block, Illegal Use of Hands, Roughing the Passer
+
+To identify fatigue-resistant players, we will perform a clustering analysis with demographic data and our derived variables from the tracking data. Then, we will summarize the average number of formation and tackle penalties for these clusters to understand the relationship between load/fatigue and penalties. We will be doing the same analysis for positive tackles.
+
+Finally, we will extract the free agents from our clustering model to compare fatigue, penalties, and tackles among these linemen.
 
 
 ## Implementation
@@ -147,7 +133,7 @@ unique(def_line$gameId)
 
 Tracking Data
 ```{r load data, eval = FALSE}
-week1 <- fread('tracking_week_1.csv')
+#week1 <- fread('tracking_week_1.csv')
 # week2 <- read.csv('tracking_week_2.csv')
 # week3 <- read.csv('tracking_week_3.csv')
 # weeks <- rbind(week1, week2, week3)
@@ -176,7 +162,7 @@ weeks <- rbindlist(lapply(file_list[2:9], fread)) # View the first few rows of t
 ```
 
 The following variables from the tracking data can be used to calculate fatigue:
- - s (speed), a (acceleration), dis (distance traveled), dir (direction), o (orientation) 
+ - s (speed), a (acceleration)
  
 Join Data
 ```{r join}
@@ -237,6 +223,8 @@ data <- data %>%
 head(data)
 ```
 
+Cumulative load will be calculated on a per-game level.
+
 Cumulative Load = CUMSUM(load)
 ```{r calculate cumulative load}
 per_play <- data %>%
@@ -251,6 +239,8 @@ head(per_play)
 ```
 
 #### Exploratory Analysis/Visualizations
+
+Let's look at some of our variables across a play/game. We will subset our data to a random gameId and then select defensive linemen at random.
 
 Load Per Player
 ```{r load per player plot}
@@ -276,7 +266,7 @@ for (id in ran_nflIds) {
 }
 ```
 
-We hypothesized that total load would decrease later in the game because a player would be more fatigues. For most of the linemen, we don't see a decline in load throughout the game. These players either remain at a almost steady load value or increase slightly towards the end of the game. This trend could be the result of a break at halftime or a higher-intensity end to a game. 
+We hypothesized that total load would decrease later in the game because a player would be more fatigues. For most of the linemen, we see a slight decline throughout the game. 
 
 Let's instead look at cumulative load over a game. 
 ```{r cum load over game plot}
@@ -315,10 +305,10 @@ for (id in ran_nflIds) {
   ggsave(plot = load_plot, "load_plot.png")
 }
 ```
+
 There is some variation across players regarding their change in max fatigue index. Whilst some do go down as the game goes on, there are others that stay level or even increase towards the end of the game.
 
 It is worth noting this is just one game and a random sample of players so it is very individualized. Once we generalize the data across all games and all players, we would hope to see more of a trend.
-
 
 
 Player height and weight may also have a relationship with acceleration. Let's visualize this relationship.
@@ -378,7 +368,6 @@ tackle_pen <- c("Horse Collar Tackle", "Defensive Holding", "Low Block", "Illega
 formation_pen <-  c("Illegal Shift", "Illegal Formation", "Defensive Offside")
 ```
 
-
 Penalties Throughout a Game
 ```{r Tackles over Time}
 play_details <- read.csv("plays.csv") %>% select(gameId, playId, quarter, gameClock)
@@ -412,18 +401,19 @@ ggsave(plot=stacked_bar, filename = "stacked_bar.png")
 
 ```
 
-This doesn't show exactly what we thought. There is an increase in both types of penalties from the first to the second quarter, and an increase in formation penalties from the third to fourth quarter. We would expect some type of reset after half time, so we will also look at fatigue by quarter. This is just a plot for week 1 data so it's not totally representative of the season or the "NFL" in general.
+In our clustering methods, we will not be separating on a quarter-level, however, we wanted to visualize the number of penalties in our dataset. There is an increase in both types of penalties from the first to the second quarter, and an increase in formation penalties from the third to fourth quarter. We see slightly more tackle penalties in total; however, the dataset contains enough of both types of penalties to continue our analysis. 
 
 #### Clustering Analysis
 
 We are going to cluster players based on their:
-  - age
-  - avg_cum_load
+  - maximum acceleration in a game,
+  - change in fatigue index (a positive measure indicates fatigue-resistance),
+  - average cumulative load in a game,
   - height
-  - max_fatigueIndex (avg per player, per game of max FI)
   - weight
+
+Once we have clustered our defensive linemen, we will be adding other values to our clustering heatmaps:
   - *_AvgPerGame (penalties and defensive plays)
-  - avg_max_acc (avg per player, per game of max acc)
   - plays_count (number of plays)
 
 ```{r grouping}
@@ -450,8 +440,6 @@ grouped <- data %>%
 changeFI <-  grouped  %>% group_by(nflId, gameId) %>% arrange(playId) %>% summarize(change_FI = first(max_fatigueIndex) - last(max_fatigueIndex))
 
 grouped <- inner_join(grouped, changeFI, by = c("nflId", "gameId"))
-
-  
 ```
 
 Some values of average/max fatigue index are Infinite because the player's logged speed is 0. Let's impute 0 for those values.
@@ -515,20 +503,18 @@ players_top <- test %>% ungroup() %>% select(displayName) %>%
   group_by(displayName) %>% mutate(count = n()) %>% distinct()
 nrow(players_top)
 rows50 = floor(nrow(players_top) *0.50)
-#players_top <- players_top %>% filter(count >= 100)
-players_top <- players_top %>% arrange(desc(count)) #do by % instead so when whole data set
+players_top <- players_top %>% arrange(desc(count))
 players_top <- players_top[1:rows50,]
 ```
 
-By selecting players with over 100 instances in the dataset, we have cut our dataset by over 50%. Selecting only these players will eliminate outliers - instances in which a player had only a few movements in a game.
+Selecting only these players will eliminate outliers - instances in which a player had only a few movements in a game or only had a few plays (either good or bad).
 
 Select Columns to Cluster.
 ```{r select cols}
 clustering_columns <- c("max_acc", "change_FI", "cum_load", "height", "weight", "age")
 ```
 
-
-Our dataframe for clustering with include one row per player in our dataset and include 12 metrics.
+Our dataframe for clustering with include one row per player in our dataset and include 6 metrics.
 ```{r make df}
 players <- unique(players_top$displayName)
 
@@ -547,8 +533,7 @@ rownames(res) <- players
 summary(res)
 ```
 
-Remove NA values (before scaling).
-All of our NA values are present in the 'age' column of our dataset. We will do so MICE imputation with the method Predictive Mean Matching ("PMM").
+All of the NA values present in the dataset are in the 'age' column. We will impute the mean value for these instances.
 ```{r impute values}
 sum(is.na(res))
 sum(is.na(res$age))
@@ -563,7 +548,8 @@ impute_data <- data.frame(lapply(res, impute_mean))
 sum(is.na(impute_data))
 ```
 
-Scale clustering data.
+Scale clustering data. 
+We have some negative values in our fatigue resistance index, so we will log this value separately before scaling.
 ```{r scale}
 # Before scaling data, log transform.
 all_data <- impute_data
@@ -593,7 +579,7 @@ plot_gap
 saveRDS(plot_gap, "gapData.RData")
 ```
 
-Here, we see that the optimal number of clusters is three so we will continue with three clusters to further see disparity between them.
+We will continue with four clusters because it provides enough disparity between groups. 
 
 Let's now run k-means clustering on the data.
 ```{r k means}
@@ -612,7 +598,6 @@ saveRDS(fit, "clusterModel.RData")
 
 ```
 
-Let's move forward with four clusters.
 ```{r centers}
 cluster <- c(1:4)
 center_df <- data.frame(cluster, centers)
@@ -620,7 +605,6 @@ center_df <- data.frame(cluster, centers)
 center_reshape <- gather(center_df, features, values, -cluster)
 saveRDS(center_reshape, "heatmap1.RData")
 ```
-
 
 
 ```{r heatmap}
@@ -643,6 +627,9 @@ heatmap <- ggplot(data = center_reshape,
 heatmap
 ggsave(plot=heatmap, filename = "heatmap.png")
 ```
+
+In looking at our heatmap, clusters 2 and 4 are of interest. Players in cluster 2 have comparatively high values for load and acceleration, however, these individuals are not becoming fatigued throughout a game. On the other hand, players in cluster 4 are much less fatigue resistant even though they have lower loads and acceleration values.
+
 ##### Part 1
 
 Now, we can add total penalties to the clusters.
@@ -706,16 +693,14 @@ heatmap2 <- ggplot(data = new_center_reshape,
 heatmap2
 ggsave(plot=heatmap2, filename = "heatmap2.png")
 ```
+
 ###### Heatmap Analysis with Penalties
 
+From this clustering analysis, we see some patterns in terms of penalties. Let's again focus on clusters 2 and 4.
 
-From this clustering analysis, we see some patterns in terms of penalties.
-
- - Cluster 3 has the highest amount/percentage of tackling penalties and the lowest percentage of formation penalties. These players have the lowest weight, age, and height, with mid-range values for load and acceleration.
- - Cluster 2 has low penalties (in terms of total count and percentage) for both categories. These individuals have low values for load and acceleration. These individuals have the highest weight and height.
- - Cluster 1 has the highest values for formation penalties. These individuals have low weight but are in the upper 50% for age and height, as well as acceleration. 
- 
-In terms of fatigue, we see average fatigue index being inversely proportional to weight and height. We see a greater acceleration for players with lower height and weight - these players are able to gain speed quicker than other players, but may also get fatigued quicker.
+- Cluster 2 were the players with higher loads and acceleration values that were fatigue resistant. Cluster 2 has the highest value for formation penalties in a game. Because these players are so explosive in their acceleration, they might be moving too early and getting called for defensive offsides.
+- On the other hand, cluster 4 has lower load and acceleration but greater fatigue. This cluster was the second-highest in tackling penalties. Because these players are getting tired later in the game, they may be making less "clean" tackles and getting called for holding or other tackling penalties.
+- Other areas of interest are the positive relationship between age and tackling penalties seen in cluster 3 and the inverse relationship between max acceleration and number of formation penalties. We also see a positive relationship between weight and the number of formation penalties.
 
 
 ##### Part 2
@@ -804,6 +789,7 @@ heatmap3 <- ggplot(data = new_clustered_def,
 heatmap3
 ggsave(plot=heatmap3, filename = "heatmap3.png")
 ```
+
 ###### Heatmap Analysis with Positive Defensive Plays
 
 We can see a split in the clusters with them tending towards either of the following groups.
@@ -823,24 +809,16 @@ These stats highlight plays where the defender provides crucial support, either 
 - passDefensed
 - tackleAssist
 
-Cluster 1: best at the supportive defensive plays, mid-range for demographics, struggle heavily with fatigue despite having low cumulative load and low acceleration, they cannot maintain it
-
-
-Cluster 2: significantly best at defensive impact plays, lightest, good at resisting fatigue despite high plays, load and acceleration
-
-
-Cluster 3: only really good for tackle assistance so they are not making big real-time plays themselves, oldest and tallest, play the least and have relatively low load and acceleration but are good at maintaining it
-
-
-Cluster 4: ok for the supportive defensive plays, shortest, average for amount they play, their load and acceleration but good at maintaining and resisting fatigue
-
-Cluster 2 is significantly best when looking holistically at defensive metrics and resistance of fatigue. Cluster 1 and 4 are both more geared towards supportive plays, but if we want to consider both production and fatigue resistance, cluster 4 is holistically better.
-
+- Cluster 1 is best at the supportive defensive plays, mid-range for demographics, struggle heavily with fatigue despite having low cumulative load and low acceleration, they cannot maintain it.
+- Cluster 2 is significantly best at defensive impact plays, lightest, good at resisting fatigue despite high plays, load and acceleration.
+- Cluster 3 is only really good for tackle assistance so they are not making big real-time plays themselves, oldest and tallest, play the least and have relatively low load and acceleration but are good at maintaining it.
+- Cluster 4 is alright for the supportive defensive plays, shortest, average for amount they play, their load and acceleration but good at maintaining and resisting fatigue
+- Cluster 2 is significantly best when looking holistically at defensive metrics and resistance of fatigue. Cluster 1 and 4 are both more geared towards supportive plays, but if we want to consider both production and fatigue resistance, cluster 4 is holistically better.
 
 
 ### Clusters by Player
 
-
+Now that we have analyzed these clusters, let's look at the players that make up each.
 ```{r}
 plot1 <- res %>% select(avg_change_fatigueResistanceIndex, avg_cum_load) 
 plot1$player_name <- rownames(plot1)
@@ -867,6 +845,9 @@ g_1 <- ggplot(plot1, # Set dataset
 g_1
 ggsave(plot= g_1, filename= "g_1.png")
 ```
+
+In this plot, the best location for a player is the upper-right corner. These players have a high load throughout a game, but are not getting fatigued. Those on the bottom right are not getting fatigued either, however, these players are taking on a lower load throughout a game.
+
 ```{r}
 plot2 <- inner_join(summary_def, names_penalties) %>% mutate(cluster = as.factor(cluster)) %>% mutate(composite_pos = rowSums(select(., 2:7)))
 
@@ -888,7 +869,12 @@ g_2 <- ggplot(plot2, # Set dataset
 g_2
 ggsave(plot= g_2, filename= "g_2.png")
 ```
+
+In this plot, the best location for a player is the bottom-right corner. These players are making the most positive plays, however, they have the least number of tackles.
+
 ## Free Agent Selection
+
+Now, let's focus only on free agents.
 ```{r curr free agents}
 page = read_html("https://www.spotrac.com/nfl/free-agents/_/year/2024/status/available/sort/contract_value")
 free_tbl <- data.frame(html_table(page)[[1]] )
@@ -930,7 +916,27 @@ g_4 <- ggplot(plot3, # Set dataset
        subtitle = "NFL 2022")+ guides(alpha = "none")
 g_4
 ```
-## Conclusion
+
+** add notes
+
+## Conclusion & Recommendations
+
+In our clustering analysis, we highlighted clusters 2 and 4. Individuals in cluster 2 are lighter, have a higher acceleration, and are key in impact players. These players, however, have the highest number of formation penalties. Although they are explosive, these players are often starting play (exploding) too early. 
+Individuals in cluster 4 are heavier and key in assisted plays, however, these individuals suffer from fatigue throughout a game. For this reason, we would recommend endurance training for these individuals. 
+
+After training or at the start/end of a season, any coach or team can rerun our clustering analysis to see if individual players have shifted between clusters. This would indicate that players have become more/less endurant, and then training can be adjusted accordingly.
+
+In future work, we would like to apply a similar fatigue analysis to other player groups, such as quarterbacks, runningbacks, and offensive linemen.
+
+## Contribution
+Imogen Meers & Sarah Deussing
+
+## Bibliography
+Alghannam, Abdullah F. “Metabolic limitations of performance and fatigue in football.” Asian journal of sports medicine vol. 3,2 (2012): 65-73. doi:10.5812/asjsm.34699
+
+Beato, Marco et al. “Monitoring Fatigue During Intermittent Exercise With Accelerometer-Derived Metrics.” Frontiers in physiology vol. 10 780. 26 Jun. 2019, doi:10.3389/fphys.2019.00780
+
+Finster-Rowen, Alex. "What is Player Load?" Catapult Sports. Catapult Sports, n.d. Web.
 
 
 
