@@ -82,7 +82,7 @@ library(cluster)
 #library(factoextra)
 library(ggrepel)
 library(data.table)
-
+library(rvest)
 
 ```
 
@@ -215,7 +215,7 @@ ran_play2 <- data %>%
   filter(frameId <= 160)
 g1 <- ggplot(ran_play2, aes(x=frameId, y = a, color = position)) + geom_point() + geom_smooth()
 ggsave(plot= g1, filename= "g1.png")
-
+g1
 ```
 
 #### Derived Variables
@@ -269,7 +269,7 @@ for (id in ran_nflIds) {
 
   print(load_plot)
   ggsave(plot= load_plot, filename= "load_plot.png")
-
+  
 }
 ```
 
@@ -583,21 +583,14 @@ Scale clustering data.
 all_data <- impute_data
 all_data$avg_change_fatigueIndex <- log(abs(impute_data$avg_change_fatigueIndex) +1)* sign(impute_data$avg_change_fatigueIndex) #log separately because negative values
 
- all_data[,-2] <- log(impute_data[,-2] + 1) 
+all_data[,-2] <- log(impute_data[,-2] + 1) 
  
- 
- summary(impute_data)
- 
- 
-# 
-# 
  sdata <- scale(all_data)
 
 #sdata <- cbind(sdata, avg_change_fatigueIndex = unscaled_col)
 saveRDS(sdata, "scaled.RData")
 
 
-#sdata <- scale(impute_data)
 ```
 
 Find the optimal number of clusters for analysis.
@@ -609,7 +602,7 @@ gap_data <- data.frame( k = 1:15, gap = gapData$Tab[,"gap"], SE.sim = gapData$Ta
 
 plot_gap <- ggplot(gap_data, aes(x = k, y = gap)) + geom_line() + geom_point() + geom_errorbar(aes(ymin = gap - SE.sim, ymax = gap + SE.sim), width = 0.2) + labs(title = "Gap Statistic", x = "Number of Clusters", y = "Gap Value") + theme_minimal()
 
-
+plot_gap
 #fviz_gap_stat(gapData)- doesnt like package in ssh
 saveRDS(plot_gap, "gapData.RData")
 ```
@@ -621,7 +614,7 @@ Let's now run k-means clustering on the data.
 set.seed(12345) 
 
 fit <- kmeans(x = sdata,
-                centers = 5, 
+                centers = 4, 
                 nstart = 25, 
                 iter.max = 100)
 clusters <- fit$cluster
@@ -635,7 +628,7 @@ saveRDS(fit, "clusterModel.RData")
 
 Let's move forward with three clusters.
 ```{r centers}
-cluster <- c(1:5)
+cluster <- c(1:4)
 center_df <- data.frame(cluster, centers)
 
 center_reshape <- gather(center_df, features, values, -cluster)
@@ -762,7 +755,6 @@ The positive values we will look at:
  - passDefensed: a passing play was stopped by the player
  - quarterbackHit: player recorded a QB hit
  - sackYardsAsDefense: yards conceded by the offense because of a sack by the player
- - safetyAsDefense: player forced a safety on this play (NOT INCLUDING AS SO RARE)
  - soloTackle: player recorded a solo tackle on this play
  - tackleAssist: player was awarded an assisted tackle
  - tackleForALoss: player recorded a tackle behind the line of scrimmage
@@ -776,7 +768,7 @@ positive_defense <- data %>% group_by(nflId) %>%
 counts_4weeks <- positive_defense %>% ungroup()%>% select(-c(gameId, playId, nflId)) %>% summarise_all(sum)
 
 
-#Number of each over the 4 weeks we have
+#Number of each occurence over the weeks
 counts_4weeks
 
 positive_defense_yds <- data %>% group_by(nflId) %>%
@@ -810,7 +802,7 @@ player_clust_def <- right_join(summary_def, play_counts, by = c("displayName")) 
 
 clustered_def <- player_clust_def %>% group_by(cluster) %>% select(-displayName) %>% summarise_all(mean) #summarise avg of players in cluster
 
-scaled <- data.frame(scale(clustered_def %>% select(-cluster))) %>% cbind(cluster = c(1,2,3,4,5)) #scaling
+scaled <- data.frame(scale(clustered_def %>% select(-cluster))) %>% cbind(cluster = c(1,2,3,4)) #scaling
 
 new_clustered_def <- inner_join(scaled, center_df, by = "cluster") #joining with clustered "fatigue stats"
 
@@ -841,15 +833,24 @@ ggsave(plot=heatmap3, filename = "heatmap3.png")
 ```
 Cluster Analysis
 
-1) A cluster of the oldest players, who are slightly below average weight and above average height. They are on the higher side of average cumulative load across their games, but also on the higher side of change in fatigue resistance index, meaning they can maintain explosivity even if their cumulative load is higher.
+Group 1: Defensive Impact Plays
+These stats reflect high-impact plays that significantly disrupt the offense or stop their progress forcefully.
 
-Regarding positive defensive plays, they are generally on the lower side of average tackles, hits etc apart from pass defensed and tackle assists.
+forcedFumbleAsDefense
 
-Regarding "mistakes", they are on the higher side of tackle penalties per game and lower side of formation penalties.
+quarterbackHit
 
-2) A cluster of the lightest players, that are slightly above average height. They roughly have the same number of plays sa group 1 and 5, but group 2 has a substantially higher avg max acceleration and avg cumulative load. However, they have the most change in negative fatigue resistance index meaning whilst their acceleration can be higher they struggle to maintain throughout the game, probably due to their high load.
+soloTackle
 
-Regarding positive defensive plays, they are among the highest in average tackles but also the highest in formation penalties Interestingly, despite the high number of tackles they remain low in tackle-related penalties meaning they are disciplined in the way they tackle, despite high indicators of poor fatigue resistance.
+tackleForALoss
+
+
+Group 2: Supportive Defensive Plays
+These stats highlight plays where the defender provides crucial support, either by assisting or directly preventing a successful offensive move.
+
+passDefensed
+
+tackleAssist
 
 Looking at both our heat maps, we need to decide which "fatigue" features to keep. Those will be:
 - age
@@ -913,9 +914,8 @@ g_2 <- ggplot(plot2, # Set dataset
 g_2
 ggsave(plot= g_2, filename= "g_2.png")
 ```
-
+### Free Agent Selection
 ```{r curr free agents}
-library(rvest)
 page = read_html("https://www.spotrac.com/nfl/free-agents/_/year/2024/status/available/sort/contract_value")
 free_tbl <- data.frame(html_table(page)[[1]] )
 names(free_tbl)[1] <- "displayName"
