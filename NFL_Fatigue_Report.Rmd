@@ -81,6 +81,7 @@ library(dendextend)
 library(cluster)
 #library(factoextra)
 library(ggrepel)
+library(data.table)
 
 
 ```
@@ -142,18 +143,33 @@ unique(def_line$gameId)
 ```
 
 Tracking Data
-```{r load data}
-# week1 <- read.csv('tracking_week_1.csv')
+```{r load data, eval = FALSE}
+week1 <- fread('tracking_week_1.csv')
 # week2 <- read.csv('tracking_week_2.csv')
 # week3 <- read.csv('tracking_week_3.csv')
 # weeks <- rbind(week1, week2, week3)
 
-weeks <- data.frame(read.csv("weeksAll.csv"))
+weeks <- data.frame(fread("weeksAll.csv"))
 dim(weeks)
 #save(weeks, file = "weeks123.RData")
 weeks$time <- as.POSIXct(weeks$time)
 unique(weeks$gameId)
 summary(weeks)
+```
+
+```{r}
+# Specify the directory containing your CSV files
+directory <- "nfl-big-data-bowl-2025"
+
+# Get the list of all CSV files in the directory
+file_list <- list.files(path = directory, pattern = "*.csv", full.names = TRUE)
+weeks <- fread(file_list[1], header = TRUE)
+# Read and combine all CSV files
+weeks <- rbindlist(lapply(file_list[2:9], fread)) # View the first few rows of the combined dataframe 
+# dim(weeks)
+# weeks$time <- as.POSIXct(weeks$time)
+# unique(weeks$gameId)
+# summary(weeks)
 ```
 
 The following variables from the tracking data can be used to calculate fatigue:
@@ -507,8 +523,10 @@ We want to analyze only players that occur many times in the dataset. We will el
 players_top <- test %>% ungroup() %>% select(displayName) %>%
   group_by(displayName) %>% mutate(count = n()) %>% distinct()
 nrow(players_top)
-players_top <- players_top %>% filter(count >= 100)
-nrow(players_top)
+rows50 = floor(nrow(players_top) *0.50)
+#players_top <- players_top %>% filter(count >= 100)
+players_top <- players_top %>% arrange(desc(count)) #do by % instead so when whole data set
+players_top <- players_top[1:rows50,]
 ```
 
 By selecting players with over 100 instances in the dataset, we have cut our dataset by over 50%. Selecting only these players will eliminate outliers - instances in which a player had only a few movements in a game.
@@ -821,7 +839,17 @@ heatmap3 <- ggplot(data = new_clustered_def,
 heatmap3
 ggsave(plot=heatmap3, filename = "heatmap3.png")
 ```
+Cluster Analysis
 
+1) A cluster of the oldest players, who are slightly below average weight and above average height. They are on the higher side of average cumulative load across their games, but also on the higher side of change in fatigue resistance index, meaning they can maintain explosivity even if their cumulative load is higher.
+
+Regarding positive defensive plays, they are generally on the lower side of average tackles, hits etc apart from pass defensed and tackle assists.
+
+Regarding "mistakes", they are on the higher side of tackle penalties per game and lower side of formation penalties.
+
+2) A cluster of the lightest players, that are slightly above average height. They roughly have the same number of plays sa group 1 and 5, but group 2 has a substantially higher avg max acceleration and avg cumulative load. However, they have the most change in negative fatigue resistance index meaning whilst their acceleration can be higher they struggle to maintain throughout the game, probably due to their high load.
+
+Regarding positive defensive plays, they are among the highest in average tackles but also the highest in formation penalties Interestingly, despite the high number of tackles they remain low in tackle-related penalties meaning they are disciplined in the way they tackle, despite high indicators of poor fatigue resistance.
 
 Looking at both our heat maps, we need to decide which "fatigue" features to keep. Those will be:
 - age
@@ -865,11 +893,11 @@ g_1
 ggsave(plot= g_1, filename= "g_1.png")
 ```
 ```{r}
-plot2 <- inner_join(summary_def, names_penalties) %>% mutate(cluster = as.factor(cluster))
+plot2 <- inner_join(summary_def, names_penalties) %>% mutate(cluster = as.factor(cluster)) %>% mutate(composite_pos = rowSums(select(., 2:7)))
 
 saveRDS(plot2, "playerplot2.RData")
 g_2 <- ggplot(plot2, # Set dataset
-              aes(x = soloTackle_AvgPerGame,  # Set x-axis as number of fastballs
+              aes(x = composite_pos,  # Set x-axis as number of fastballs
                   y = avg_pen, color = cluster)) + # Set y-axis as fastball speed
   geom_point() + # Add geom point for scatter plot
   # Label players with fastball speed above 95
@@ -879,13 +907,55 @@ g_2 <- ggplot(plot2, # Set dataset
         panel.grid.minor = element_blank(), # Remove grid
         panel.border = element_blank(), # Remove grid
         panel.background = element_blank()) + # Remove grid
-  labs(x = "Avg Solo Tackles Per Game", y = "Avg Total Penalties per Game",
+  labs(x = "Composite Positive Defensive Metric Per Game", y = "Avg Total Penalties per Game",
        title = "Defensive Line by Cluster- Tackles vs Penalties",
        subtitle = "NFL 2022")
 g_2
 ggsave(plot= g_2, filename= "g_2.png")
 ```
 
+```{r curr free agents}
+library(rvest)
+page = read_html("https://www.spotrac.com/nfl/free-agents/_/year/2024/status/available/sort/contract_value")
+free_tbl <- data.frame(html_table(page)[[1]] )
+names(free_tbl)[1] <- "displayName"
+
+free_tbl <- free_tbl %>% filter(displayName %in% unique(test$displayName))
+free_tbl <- free_tbl %>% filter(displayName %in% unique(players_top$displayName))
+
+
+plot3 <- inner_join(plot1 %>% select(-cluster), plot2, by = c("player_name" = "displayName"))%>% filter(player_name %in% free_tbl$displayName) %>% mutate(composite = rowSums(select(., 4:12)))
+ 
+g_3 <- ggplot(plot3, # Set dataset
+              aes(x = avg_change_fatigueIndex,  # Set x-axis as number of fastballs
+                  y = avg_cum_load, color = cluster, size = composite, alpha = 0.7)) + # Set y-axis as fastball speed
+  geom_point() + # Add geom point for scatter plot
+  geom_text_repel(data = plot3,
+                  aes(label = paste(player_name))) +
+   theme(panel.grid.major = element_blank(), # Remove grid
+        panel.grid.minor = element_blank(), # Remove grid
+        panel.border = element_blank(), # Remove grid
+        panel.background = element_blank()) + # Remove grid
+  labs(x = "Avg Change Fatigue Resistance Index", y = "Avg Cumulative Load",
+       title = "Defensive Line by Cluster- Fatigue Resistance",
+       subtitle = "NFL 2022")+ guides(alpha = "none")
+g_3
+
+g_4 <- ggplot(plot3, # Set dataset
+              aes(x = avg_change_fatigueIndex,  # Set x-axis as number of fastballs
+                  y = avg_cum_load, color = cluster, size = avg_pen, alpha = 0.7)) + # Set y-axis as fastball speed
+  geom_point() + # Add geom point for scatter plot
+  geom_text_repel(data = plot3,
+                  aes(label = paste(player_name))) +
+   theme(panel.grid.major = element_blank(), # Remove grid
+        panel.grid.minor = element_blank(), # Remove grid
+        panel.border = element_blank(), # Remove grid
+        panel.background = element_blank()) + # Remove grid
+  labs(x = "Avg Change Fatigue Resistance Index", y = "Avg Cumulative Load",
+       title = "Defensive Line by Cluster- Fatigue Resistance",
+       subtitle = "NFL 2022")+ guides(alpha = "none")
+g_4
+```
 
 
 
