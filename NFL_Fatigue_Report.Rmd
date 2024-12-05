@@ -179,7 +179,8 @@ summary(data)
 
 Two variables of importance are a player's load and fatigue index, which is equal to acceleration/speed. Let's visualize these for one player in one play. We want to look at movement only during/after the ball is snapped. We will filter the frameId to be within a small range of the snap and initial acceleration.
 
-Load Per Play
+Fatigue Index Per Play: Acceleration/Speed.
+This is a measure of player explosiveness.
 ```{r load per play}
 ran_play <- data %>%
   filter(gameId == 2022090800) %>%
@@ -190,9 +191,10 @@ ran_play <- data %>%
   mutate(fatigueIndex = a/s)
 g <- ggplot(ran_play, aes(x=frameId, y = fatigueIndex, color = position)) + geom_point() + geom_smooth()
 ggsave(plot= g, filename= "g.png")
-
-
+g
 ```
+
+We see initial explosiveness right when the ball is snapped and linemen are making their first movement.
 
 Acceleration Per Play
 ```{r acc per play}
@@ -206,6 +208,8 @@ g1 <- ggplot(ran_play2, aes(x=frameId, y = a, color = position)) + geom_point() 
 ggsave(plot= g1, filename= "g1.png")
 g1
 ```
+
+In terms of acceleration, we see this value increase after the ball is snapped and then decrease later in the play.
 
 #### Derived Variables
 
@@ -266,9 +270,9 @@ for (id in ran_nflIds) {
 }
 ```
 
-We hypothesized that total load would decrease later in the game because a player would be more fatigues. For most of the linemen, we see a slight decline throughout the game. 
+We hypothesized that total load would decrease later in the game because a player would be more fatigues. For most of the linemen, we see a slight decline throughout the game when looking at their initial load (beginning of game) to final load (end of game). 
 
-Let's instead look at cumulative load over a game. 
+Let's also look at cumulative load over a game. 
 ```{r cum load over game plot}
 game <- per_play[per_play$gameId == 2022090800,]
 
@@ -288,7 +292,9 @@ for (id in ran_nflIds) {
 }
 ```
 
-In addition to calculating total load using the sum of accelerations, we can also look at the change in the fatigue analysis of a player. This measure will incorporate both player speed and acceleration during the play. A higher fatigue index indicates a more aggressive change in speed, so we would expect fatigue index to decrease as a player gets tired (throughout a game).
+For cumulative load, we see a steady increase across a game for the majority of our randomly selected players.
+
+In addition to this measure of calculating total load using the sum of accelerations, we can also look at the change in the fatigue analysis of a player. Change in fatigue will incorporate both player speed and acceleration during the play. A higher fatigue index (acceleration/speed) indicates a more aggressive change in speed, so we would expect fatigue index to decrease as a player gets tired (throughout a game).
 
 Fatigue Index over a Game
 ```{r fatigue index calc}
@@ -306,12 +312,11 @@ for (id in ran_nflIds) {
 }
 ```
 
-There is some variation across players regarding their change in max fatigue index. Whilst some do go down as the game goes on, there are others that stay level or even increase towards the end of the game.
+There is some variation across players regarding their change in max fatigue index. Whilst some do go down as the game goes on, there are others that stay level or even increase towards the end of the game. These players with a steady fatigue index value are not becoming fatigues throughout a game, while others suffer from fatigue and we see this measure of "explosiveness" decrease.
 
-It is worth noting this is just one game and a random sample of players so it is very individualized. Once we generalize the data across all games and all players, we would hope to see more of a trend.
+It is worth noting this is just one game and a random sample of players so it is very individualized. Once we generalize the data across all games and all players, we would hope to see more of a consistent trend.
 
-
-Player height and weight may also have a relationship with acceleration. Let's visualize this relationship.
+In addition to our derived variables, we will also be using demographic variables in our analysis. Player height and weight may also have a relationship with acceleration. Let's visualize this relationship.
 
 Effect of Demographics on Median Acceleration
 ```{r demographics}
@@ -464,7 +469,7 @@ test <- test %>%
 head(test)
 ```
 
-We also need to add player height, weight, and age.
+We also need to add player height, weight, and age from our demographic data.
 ```{r add demographics}
 test <- test %>%
   left_join(player_data[, c("nflId", "height", "weight", "birthDate")], by = "nflId")
@@ -473,7 +478,7 @@ test <- test %>%
 Now that we have a dataset with the necessary values for our clustering, we need to clean the height and birthDate columns. We will change height to an numeric inches value and birthDate to a numerical age.
 ```{r functions}
 # height conversion
-class(test$height)
+#class(test$height)
 convert_to_inches <- function(height_str) {
   parts <- strsplit(height_str, "-")[[1]]
   feet <- as.numeric(parts[1])
@@ -484,7 +489,7 @@ convert_to_inches <- function(height_str) {
 test$height <- sapply(test$height, convert_to_inches)
 
 # birthDate conversion
-class(test$birthDate)
+#class(test$birthDate)
 convert_to_age <- function(birthdate) {
   birthdate <- as.Date(birthdate, format = "%Y-%m-%d")
   date <- Sys.Date()
@@ -509,12 +514,18 @@ players_top <- players_top[1:rows50,]
 
 Selecting only these players will eliminate outliers - instances in which a player had only a few movements in a game or only had a few plays (either good or bad).
 
-Select Columns to Cluster.
+From our dataset, we will select columns to cluster:
+ - max_acc
+ - change_FI
+ - cum_load
+ - height
+ - weight
+ - age
 ```{r select cols}
 clustering_columns <- c("max_acc", "change_FI", "cum_load", "height", "weight", "age")
 ```
 
-Our dataframe for clustering with include one row per player in our dataset and include 6 metrics.
+Our dataframe for clustering with include one row per player in our dataset and include 6 metrics. We will take the clustering columns selected above and find the average value of these metrics for each player in our dataset.
 ```{r make df}
 players <- unique(players_top$displayName)
 
@@ -548,8 +559,7 @@ impute_data <- data.frame(lapply(res, impute_mean))
 sum(is.na(impute_data))
 ```
 
-Scale clustering data. 
-We have some negative values in our fatigue resistance index, so we will log this value separately before scaling.
+Now, let's scale clustering data. We have some negative values in our fatigue resistance index, so we will log this value separately before scaling.
 ```{r scale}
 # Before scaling data, log transform.
 all_data <- impute_data
@@ -591,12 +601,13 @@ fit <- kmeans(x = sdata,
                 iter.max = 100)
 clusters <- fit$cluster
 centers <- fit$centers
+
+# number of linemen in each cluster
 summary(as.factor(clusters))
 
 saveRDS(fit, "clusterModel.RData")
-
-
 ```
+
 
 ```{r centers}
 cluster <- c(1:4)
@@ -606,7 +617,7 @@ center_reshape <- gather(center_df, features, values, -cluster)
 saveRDS(center_reshape, "heatmap1.RData")
 ```
 
-
+Heatmap of our clusters.
 ```{r heatmap}
 heatmap <- ggplot(data = center_reshape, 
                    aes(x = features, y = cluster, fill = values)) + 
@@ -628,7 +639,9 @@ heatmap
 ggsave(plot=heatmap, filename = "heatmap.png")
 ```
 
-In looking at our heat map, clusters 2, 3 and 4 are the most fatigue resistant compared to cluster 1 that struggles a lot to maintain explosiveness. In looking at demographics, cluster 2 contains the heaviest players, cluster 3 contains the tallest and oldest players and clusters 1 and 4 contain roughly the same demographic of players with the cluster 4 players being slightly shorter.
+In looking at our heat map, clusters 2, 3 and 4 are the most fatigue resistant compared to cluster 1 that struggles a lot to maintain explosiveness. In looking at demographics, cluster 2 contains the lightest players, cluster 3 contains the tallest and oldest players, and clusters 1 and 4 contain roughly the same demographic of players with the cluster 4 players being slightly shorter.
+
+We see cluster 2 having the highest acceleration values and cumulative load in a game. On the other hand, cluster 4 has the highest fatigue resistance, but these players are taking on a lesser load compared to the players in cluster 2.
 
 ##### Part 1
 
@@ -673,6 +686,7 @@ saveRDS(new_center_reshape, "heatmap2.RData")
 
 ```
 
+New heatmap with penalties.
 ```{r new heatmap}
 heatmap2 <- ggplot(data = new_center_reshape, 
                    aes(x = features, y = cluster, fill = values)) + 
@@ -696,20 +710,18 @@ ggsave(plot=heatmap2, filename = "heatmap2.png")
 
 ###### Heatmap Analysis with Penalties
 
-From this clustering analysis, we see some patterns in terms of penalties. Let's again focus on clusters 2 and 4.
+From this clustering analysis, we see some patterns in terms of penalties.
 
-- Cluster 2 were the players with higher loads and acceleration values that were fatigue resistant. Cluster 2 has the highest value for formation penalties in a game. This could be because these players are so explosive in their acceleration, they might be moving too early and getting called for defensive offsides.
+Players in cluster 2 were those with higher loads and acceleration values. These linemen were pretty fatigue resistant. When adding in penalties, we see that those in cluster 2 have the highest value for formation penalties in a game. This could be because these players are so explosive in their acceleration, they might be moving too early and getting called for defensive offsides.
 
-- Cluster 4 has lower load and acceleration and is also very good at resisting fatigue. This cluster was not bad for either type of penalties, which indicates they are reliable and probably due to their fatigue resistance, are not making as many mistakes.
+Cluster 4 has a lower load and acceleration than cluster 2 and is also good at resisting fatigue. Players in this cluster do not have high numbers of either type of penalty, which indicated their reliability across a game as a result of fatigue resistance.
 
-- Surprisingly, cluster 1 despite being the least fatigue resistance also have low numbers of both penalties. This could be because they don't have the explosiveness or aggression that normally comes with penalites.
+Cluster 1 includes players that suffer from fatigue in a game. Suprisingly, these players also have low numbers of both penalties. This could be because they don't have the explosiveness or aggression that normally comes with penalites.
 
-- Other areas of interest are the positive relationship between age and tackling penalties seen in cluster 3 and the inverse relationship between max acceleration and number of formation penalties. We also see a positive relationship between weight and the number of formation penalties.
-
+Other areas of interest are the positive relationship between age and tackling penalties seen in cluster 3 and the inverse relationship between max acceleration and number of formation penalties. We also see a positive relationship between weight and the number of formation penalties.
 
 ##### Part 2
 Now let's see the influence of these similar "fatigue" and "demographic" variables on positive defensive performance, rather than negative penalties.
-
 
 The positive values we will look at:
  - forcedFumbleAsDefense: forced a fumble by the opposing team
@@ -721,8 +733,6 @@ The positive values we will look at:
  - tackleAssist: player was awarded an assisted tackle
  - tackleForALoss: player recorded a tackle behind the line of scrimmage
  - tackleForALossYardage: yards conceded by the offense because of a tackle
- 
- 
 ```{r}
 positive_defense <- data %>% group_by(nflId) %>%
   select(gameId, playId, nflId, forcedFumbleAsDefense, passDefensed, quarterbackHit, soloTackle, tackleAssist, tackleForALoss) %>% group_by(gameId, playId, nflId) %>% summarise(across(everything(), ~ as.integer(any(. == 1))))
@@ -813,12 +823,15 @@ These stats highlight plays where the defender provides crucial support, either 
 - passDefensed
 - tackleAssist
 
-- Cluster 1 is best at the supportive defensive plays, mid-range for demographics, struggle heavily with fatigue despite having low cumulative load and low acceleration, they cannot maintain it.
-- Cluster 2 is significantly best at defensive impact plays, lightest, good at resisting fatigue despite high plays, load and acceleration.
-- Cluster 3 is only really good for tackle assistance so they are not making big real-time plays themselves, oldest and tallest, play the least and have relatively low load and acceleration but are good at maintaining it.
-- Cluster 4 is alright for the supportive defensive plays, shortest, average for amount they play, their load and acceleration but good at maintaining and resisting fatigue
+Cluster 1 is best at the supportive defensive plays, mid-range for demographics, struggle heavily with fatigue despite having low cumulative load and low acceleration, they cannot maintain it.
 
-- __Cluster 2 is significantly best when looking holistically at defensive metrics and resistance of fatigue. Cluster 1 and 4 are both more geared towards supportive plays, but if we want to consider both production and fatigue resistance, cluster 4 is holistically better.__
+Cluster 2 is significantly best at defensive impact plays, lightest, good at resisting fatigue despite high plays, load and acceleration.
+
+Cluster 3 is only really good for tackle assistance so they are not making big real-time plays themselves, oldest and tallest, play the least and have relatively low load and acceleration but are good at maintaining it.
+
+Cluster 4 is alright for the supportive defensive plays, shortest, average for amount they play, their load and acceleration but good at maintaining and resisting fatigue
+
+__Cluster 2 is significantly best when looking holistically at defensive metrics and resistance of fatigue. Cluster 1 and 4 are both more geared towards supportive plays, but if we want to consider both production and fatigue resistance, cluster 4 is holistically better.__
 
 
 ### Clusters by Player
