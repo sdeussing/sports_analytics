@@ -8,9 +8,9 @@ output:
 ---
 
 ## Introduction
-Our analysis will study fatigue in defensive linemen using their speed, acceleration, distance traveled, and orientation. Our motivation for pursuing this problem is our interest in injury-related factors for athletes and our desire to find ways to lessen the likelihood of injury and burnout/fatigue in a game.
+Our analysis will study fatigue in defensive linemen using their speed and acceleration and its effect on production and "mistakes". Our motivation for pursuing this problem is our interest in the performance of defensive linemen as at the end of the game, they often make pivotal plays both good and bad that can change the game script. We wanted to see if fatigue is a factor for certain players.
 
-We will be calculating a player load and analyze the defensive player's effectiveness. To do so, we will combine this movement data with play outcome data - if the player sacked the quarterback, had a solo tackle, etc. The outcome of our analysis will be to predict likelihood of "mistakes" and positive plays, based on player fatigue, other game-time variables, and demographic variables such as height, weight, and age. We will be using K-Mean Clustering methods to group similar defensive linemen based on these variables. Finally, we will advise teams/coaches of the most fatigue-resistant linemen that are currently free agents and provide recommendations to improve player fatigue and lessen the number of penalties.
+We will be calculating a player load and analyze the defensive player's effectiveness. To do so, we will combine this movement data with play outcome data - if the player sacked the quarterback, had a solo tackle, etc. The outcome of our analysis will be to evaluate players based on "mistakes", positive plays and player fatigue, by including game-time variables, and demographic variables such as height, weight, and age. We will be using K-Mean Clustering methods to group similar defensive linemen based on these variables. Finally, we will advise teams/coaches of the most fatigue-resistant and productive linemen that are currently free agents and provide use cases for our model to track player fatigue and lessen the number of penalties.
 
 #### Data Overview
 The dataset is a part of the NFL Big Data Bowl 2025, and it is taken from:
@@ -628,7 +628,7 @@ heatmap
 ggsave(plot=heatmap, filename = "heatmap.png")
 ```
 
-In looking at our heatmap, clusters 2 and 4 are of interest. Players in cluster 2 have comparatively high values for load and acceleration, however, these individuals are not becoming fatigued throughout a game. On the other hand, players in cluster 4 are much less fatigue resistant even though they have lower loads and acceleration values.
+In looking at our heat map, clusters 2, 3 and 4 are the most fatigue resistant compared to cluster 1 that struggles a lot to maintain explosiveness. In looking at demographics, cluster 2 contains the heaviest players, cluster 3 contains the tallest and oldest players and clusters 1 and 4 contain roughly the same demographic of players with the cluster 4 players being slightly shorter.
 
 ##### Part 1
 
@@ -698,8 +698,12 @@ ggsave(plot=heatmap2, filename = "heatmap2.png")
 
 From this clustering analysis, we see some patterns in terms of penalties. Let's again focus on clusters 2 and 4.
 
-- Cluster 2 were the players with higher loads and acceleration values that were fatigue resistant. Cluster 2 has the highest value for formation penalties in a game. Because these players are so explosive in their acceleration, they might be moving too early and getting called for defensive offsides.
-- On the other hand, cluster 4 has lower load and acceleration but greater fatigue. This cluster was the second-highest in tackling penalties. Because these players are getting tired later in the game, they may be making less "clean" tackles and getting called for holding or other tackling penalties.
+- Cluster 2 were the players with higher loads and acceleration values that were fatigue resistant. Cluster 2 has the highest value for formation penalties in a game. This could be because these players are so explosive in their acceleration, they might be moving too early and getting called for defensive offsides.
+
+- Cluster 4 has lower load and acceleration and is also very good at resisting fatigue. This cluster was not bad for either type of penalties, which indicates they are reliable and probably due to their fatigue resistance, are not making as many mistakes.
+
+- Surprisingly, cluster 1 despite being the least fatigue resistance also have low numbers of both penalties. This could be because they don't have the explosiveness or aggression that normally comes with penalites.
+
 - Other areas of interest are the positive relationship between age and tackling penalties seen in cluster 3 and the inverse relationship between max acceleration and number of formation penalties. We also see a positive relationship between weight and the number of formation penalties.
 
 
@@ -813,7 +817,8 @@ These stats highlight plays where the defender provides crucial support, either 
 - Cluster 2 is significantly best at defensive impact plays, lightest, good at resisting fatigue despite high plays, load and acceleration.
 - Cluster 3 is only really good for tackle assistance so they are not making big real-time plays themselves, oldest and tallest, play the least and have relatively low load and acceleration but are good at maintaining it.
 - Cluster 4 is alright for the supportive defensive plays, shortest, average for amount they play, their load and acceleration but good at maintaining and resisting fatigue
-- Cluster 2 is significantly best when looking holistically at defensive metrics and resistance of fatigue. Cluster 1 and 4 are both more geared towards supportive plays, but if we want to consider both production and fatigue resistance, cluster 4 is holistically better.
+
+- __Cluster 2 is significantly best when looking holistically at defensive metrics and resistance of fatigue. Cluster 1 and 4 are both more geared towards supportive plays, but if we want to consider both production and fatigue resistance, cluster 4 is holistically better.__
 
 
 ### Clusters by Player
@@ -872,6 +877,8 @@ ggsave(plot= g_2, filename= "g_2.png")
 
 In this plot, the best location for a player is the bottom-right corner. These players are making the most positive plays, however, they have the least number of tackles.
 
+We added both penalties and positive plays to our fatigue clustering. Whilst the above plots show fatigue and then tackles/plays it is important to consider both metrics together. Depending on the needs of the team, if they are more focused on production and focused about players resisting fatigue (perhaps they have a large bench), they may interpret our analysis differently to a team that is looking for a single player, who may not be as effective in positive production but can keep the intensity throughout the whole game.
+
 ## Free Agent Selection
 
 Now, let's focus only on free agents.
@@ -917,16 +924,17 @@ g_4 <- ggplot(plot3, # Set dataset
 g_4
 ```
 
-** add notes
+Based on the current free agents that are available, we would recommend Armon Watts. According to our analysis that includes fatigue resistance, defensive production and penalties, Watts is the best holistic pick. He scores highly on our fatigue resistance index, meaning he can maintain explosiveness throughout the whole game. Whilst not the highest, he has good positive defensive production especially compared to other "fatigue-resistant" players and miantain a low numbers penalties. From this, he would be a reliable player to use throughout the whole game, including clutch moments at the end where teams cannot afford defensive linemen giving up penalties at the end of a cloes game.
 
 ## Conclusion & Recommendations
 
-In our clustering analysis, we highlighted clusters 2 and 4. Individuals in cluster 2 are lighter, have a higher acceleration, and are key in impact players. These players, however, have the highest number of formation penalties. Although they are explosive, these players are often starting play (exploding) too early. 
-Individuals in cluster 4 are heavier and key in assisted plays, however, these individuals suffer from fatigue throughout a game. For this reason, we would recommend endurance training for these individuals. 
+In our clustering analysis, we highlighted clusters 2 and 4. Both these clusters exhibit fatigue resistance whilst producing good defensive metrics. Individuals in cluster 2 are lighter, have a higher acceleration, and are key in impact defensive plays. They do not have an overwhelming number of penalties in either category.
 
-After training or at the start/end of a season, any coach or team can rerun our clustering analysis to see if individual players have shifted between clusters. This would indicate that players have become more/less endurant, and then training can be adjusted accordingly.
+Individuals in cluster 4 are heavier and key in supportive defensive plays and also the most resistant to fatigue. These would be reliable players through a whole game, helping teammates make big plays whilst not making mistakes themselves. It is likely you would not need a high number of cluster 4 players as they would likely not need to be subbed frequently.
 
-In future work, we would like to apply a similar fatigue analysis to other player groups, such as quarterbacks, runningbacks, and offensive linemen.
+For the remaining two clusters, 1 and 3, these players either have weaknesses in fatigue resistance (1) or penalties and defensive production (3). After training or at the start/end of a season, any coach or team can rerun our clustering analysis to see if individual players any these clusters have shifted. This would indicate that players have become more/less fatigue resistant or are making more defensive plays/less mistakes, and then training can be adjusted accordingly.
+
+In future work, we would like to apply a similar fatigue analysis to other player groups, such as quarterbacks, running backs, and offensive linemen or make our analysis more specific to one position-type to allow for less inter-position variation.
 
 ## Contribution
 Imogen Meers & Sarah Deussing
